@@ -1,14 +1,16 @@
-from pytest import Parser
 import logging
+from pathlib import Path
 
-pytest_plugins = ["logging", "tests.fixtures.ohlcv"]
+import pandas as pd
+import pytest
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+pytest_plugins = ["logging", "tests.fixtures.ohlcv"]
 
-def pytest_addoption(parser: Parser):
-    logger.info("Loading options")
+
+def pytest_addoption(parser: pytest.Parser):
     parser.addoption(
         "--ohlcv",
         action="store",

@@ -1,12 +1,17 @@
+import pandas as pd
+
+
 class Indicator:
 
+    _data: pd.DataFrame
     _period: int
 
-    def __init__(self, period: int) -> None:
+    def __init__(self, data: pd.DataFrame, period: int) -> None:
+        self._data = data
         self._period = period
 
-    def update(self, *args, **kwargs):
+    def calculate(self, *args, **kwargs):
         pass
 
-    def calculate(self, *args, **kwargs):
+    def update(self, *args, **kwargs):
         pass

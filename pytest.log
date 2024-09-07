@@ -1,0 +1,4 @@
+2024-09-07 17:40:14 [    INFO] Read ohlcv file name argument: btc_ohlcv.csv (ohlcv.py:13)
+2024-09-07 17:40:14 [    INFO] - OHLCV Dataframe Information - (test_ohlcv.py:19)
+2024-09-07 17:40:14 [    INFO] columns: Index(['timestamp', 'open', 'high', 'low', 'close', 'volume'], dtype='object') (test_ohlcv.py:20)
+2024-09-07 17:40:14 [    INFO] size: 10000 (test_ohlcv.py:21)
