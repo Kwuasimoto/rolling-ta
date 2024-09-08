@@ -1,8 +1,8 @@
 # DO NOT EXPOSE TO PACKAGE.
 
-from rolling_ta.momentum import RSI
+from rolling_ta.trend import SMA
 from rolling_ta.logging import logger
-from ta.momentum import RSIIndicator
+from ta.trend import SMAIndicator
 import os
 import pandas as pd
 
@@ -11,12 +11,31 @@ if __name__ == "__main__":
     file_name = os.path.join(data_path, "tests", "data", "btc_ohlcv.csv")
     data = pd.read_csv(file_name)
 
-    logger.info(f"\n{data[:10]}")
+    copy = data.loc[:99].copy()
+    logger.debug(f"SMA Input: [data=\n{copy[:26]}\n]")
 
-    expected = RSIIndicator(data["close"])
-    expected_rsi = expected.rsi()
-    logger.info(f"{expected_rsi}")
+    expected = SMAIndicator(copy["close"], 12)
+    expected_sma = expected.sma_indicator()
 
-    rolling = RSI(data)
-    rolling_rsi = rolling.data()
-    logger.info(f"{rolling_rsi}")
+    rolling = SMA(copy, init=True)
+    rolling_sma = rolling.data()
+
+    for [e, r] in zip(expected_sma, rolling_sma):
+        logger.debug(f"Test: [e={round(e, 2)}, r={round(r, 2)}]")
+
+## -- RSI (move to tests eventually) --
+
+# if __name__ == "__main__":
+#     data_path = os.path.dirname(__file__)
+#     file_name = os.path.join(data_path, "tests", "data", "btc_ohlcv.csv")
+#     data = pd.read_csv(file_name)
+
+#     logger.info(f"\n{data[:10]}")
+
+#     expected = RSIIndicator(data["close"])
+#     expected_rsi = expected.rsi()
+#     logger.info(f"{expected_rsi}")
+
+#     rolling = RSI(data)
+#     rolling_rsi = rolling.data()
+#     logger.info(f"{rolling_rsi}")

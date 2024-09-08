@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 
 from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
 
 
 # Math derived from chatGPT + https://www.investopedia.com/terms/r/rsi.asp
 class RSI(Indicator):
+    """Rolling RSI Indicator https://www.investopedia.com/terms/r/rsi.asp"""
 
     _gains = 0.0
     _losses = 0.0
