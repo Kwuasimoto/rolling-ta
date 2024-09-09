@@ -1,15 +1,17 @@
 # DO NOT EXPOSE TO PACKAGE.
 
-from rolling_ta.trend import EMA
-from rolling_ta.logging import logger
-from ta.trend import EMAIndicator
-import os
+import importlib.resources as pkg
+
 import pandas as pd
+from ta.trend import EMAIndicator
+
+from rolling_ta.logging import logger
+from rolling_ta.trend import EMA
 
 if __name__ == "__main__":
-    data_path = os.path.dirname(__file__)
-    file_name = os.path.join(data_path, "tests", "data", "btc_ohlcv.csv")
-    data = pd.read_csv(file_name)
+    resources = pkg.files("resources")
+    csv_file = "btc_ohlcv.csv"
+    data = pd.read_csv(resources / csv_file)
 
     copy = data.loc[:99].copy()
     logger.debug(f"SMA Input: [data=\n{copy[:26]}\n]")
