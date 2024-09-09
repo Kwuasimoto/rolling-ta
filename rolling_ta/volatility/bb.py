@@ -40,6 +40,14 @@ class BollingerBands(Indicator):
         logger.debug(
             f"BollingerBands init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
         )
+
+        self.set_column_names(
+            {
+                "sma": f"sma_{period}",
+                "lower_band": f"bb_lband_{self._period}",
+                "upper_band": f"bb_uband_{self._period}",
+            }
+        )
         self._weight = weight
 
         if init:
@@ -50,6 +58,10 @@ class BollingerBands(Indicator):
         close = self._data["close"]
         count = close.shape[0]
 
+        sma_column = self._column_names["sma"]
+        lband_column = self._column_names["lower_band"]
+        uband_column = self._column_names["upper_band"]
+
         self._sma = SMA(self._data, self._period, False, self._init, False)
 
         # Calculate initital BB Values
@@ -57,10 +69,12 @@ class BollingerBands(Indicator):
 
         if self._memory:
             self._count = count
-            self._data[f"bb_mband_{self._period}"] = np.nan
-            self._data[f"bb_uband_{self._period}"] = np.nan
-            self._data[f"bb_lband_{self._period}"] = np.nan
-            self.save(self._period - 1)
+            self._data[sma_column] = np.nan
+            self._data[lband_column] = np.nan
+            self._data[uband_column] = np.nan
+            self._data.at[self._period - 1, sma_column] = self._sma._latest_value
+            self._data.at[self._period - 1, uband_column] = self._upper_band
+            self._data.at[self._period - 1, lband_column] = self._lower_band
         else:
             self._data = None
             self._sma._data = None
@@ -70,7 +84,38 @@ class BollingerBands(Indicator):
             for i in range(self._period, count):
                 current_close = close[i]
                 self._sma.update(current_close)
-                self.update(current_close)
+
+                self._stddev = np.std(self._sma._window)
+                stddev_weighted = self._stddev * self._weight
+
+                self._upper_band = self._sma._latest_value + stddev_weighted
+                self._lower_band = self._sma._latest_value - stddev_weighted
+
+                if self._memory:
+                    self._data.at[i, sma_column] = self._sma._latest_value
+                    self._data.at[i, uband_column] = self._upper_band
+                    self._data.at[i, lband_column] = self._lower_band
+
+    def update(self, close: np.float64):
+        # Update SMA
+        self._sma.update(close)
+
+        # Calculate initital BB Values
+        self.calculate()
+
+        if self._memory:
+            self._data.at[self._count, self._column_names["sma"]] = (
+                self._sma._latest_value
+            )
+            self._data.at[self._count, self._column_names["upper_band"]] = (
+                self._upper_band
+            )
+            self._data.at[self._count, self._column_names["lower_band"]] = (
+                self._lower_band
+            )
+            self._count += 1
+
+        return self._latest_value
 
     def calculate(self):
         self._stddev = np.std(self._sma._window)
@@ -78,20 +123,3 @@ class BollingerBands(Indicator):
 
         self._upper_band = self._sma._latest_value + stddev_weighted
         self._lower_band = self._sma._latest_value - stddev_weighted
-
-    def save(self, index: int):
-        self._data.at[index, f"bb_mband_{self._period}"] = self._sma._latest_value
-        self._data.at[index, f"bb_uband_{self._period}"] = self._upper_band
-        self._data.at[index, f"bb_lband_{self._period}"] = self._lower_band
-
-    def update(self, close: np.float64):
-        self._sma.update(close)
-
-        # Calculate initital BB Values
-        self.calculate()
-
-        if self._memory:
-            self.save(self._count)
-            self._count += 1
-
-        return self._latest_value
