@@ -10,7 +10,7 @@ class Indicator:
     _count = 0
 
     def __init__(
-        self, data: pd.DataFrame, period: int, memory: bool = True, init: bool = False
+        self, data: pd.DataFrame, period: int, memory: bool = True, init: bool = True
     ) -> None:
         if len(data) < period:
             raise ArithmeticError(

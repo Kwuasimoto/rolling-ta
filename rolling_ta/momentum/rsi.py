@@ -76,10 +76,10 @@ class RSI(Indicator):
         rs = self._avg_gain / self._avg_loss
         return 100 - (100 / (1 + rs))
 
-    def update(self, price: float):
+    def update(self, close: float):
         # Get the delta in price, and calculate gain/loss
-        delta = price - self._prev_price
-        self._prev_price = price
+        delta = close - self._prev_price
+        self._prev_price = close
 
         gain = np.where(delta > 0, delta, 0)
         loss = np.where(delta < 0, -delta, 0)

@@ -1,2 +1,3 @@
 .rolling-ta/
 tests/data/*
+dist/
