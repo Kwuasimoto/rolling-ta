@@ -1,5 +1,5 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from rolling_ta.indicator import Indicator
 
@@ -13,20 +13,38 @@ class RSI(Indicator):
     _prev_price = np.nan
     _avg_gain = np.nan
     _avg_loss = np.nan
-    _rsi = np.nan
 
-    def __init__(self, data: pd.DataFrame, period: int = 14, memory=True) -> None:
-        """Rolling RSI Indicator
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period: int = 14,
+        memory: bool = True,
+        init: bool = True,
+        roll: bool = True,
+    ) -> None:
+        """Rolling RSI indicator
+
         https://www.investopedia.com/terms/r/rsi.asp
 
         Args:
-            series (pd.DataFrame): The initial dataframe or list of information to use. Must contain a "close" column.
-            period (int): Default=14 | RSI Window.
-            memory (bool): Default=True | Memory flag, if false removes all information not required for rsi.update().
+            data (pd.DataFrame): The initial dataframe to use. Must contain a "close" column.
+            period (int): Default=14 | Window length.
+            memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
+            init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
+            roll (bool, optional): Default=True | Calculate remaining indicator values upon instantiation.
         """
-        super().__init__(data, period)
+        super().__init__(data, period, memory, init, roll)
 
-        close = data["close"]
+        self.set_column_names({"rsi": f"rsi_{self._period}"})
+
+        if init:
+            self.init()
+
+    def init(self):
+        close = self._data["close"]
+        count = close.shape[0]
+        column = self._column_names["rsi"]
+
         delta = close.diff()
 
         # Use numpy vectorization for initial gains and losses.
@@ -34,47 +52,41 @@ class RSI(Indicator):
         losses = np.where(delta < 0, -delta, 0)
 
         # SMA-like phase-1 calculations
-        self._avg_gain = np.mean(gains[:period])
-        self._avg_loss = np.mean(losses[:period])
+        self._avg_gain = np.mean(gains[: self._period])
+        self._avg_loss = np.mean(losses[: self._period])
 
         # Store the rsi
-        self._rsi = self.calculate()
+        self._latest_value = self.calculate()
 
         # Initialize state for rolling updates.
         self._gains = np.sum(gains)
         self._losses = np.sum(losses)
-        self._prev_price = close.iloc[-1]
-        self._count = len(data)
 
         # Remove information not necessary for updates if not flag.
-        if not memory:
-            self._data = None
+        if self._memory:
+            self._count = count
+            self._data[column] = np.nan
+            self._data.at[self._period - 1, column] = self._latest_value
         else:
-            self._data["rsi"] = np.nan
-            self._data.at[period - 1, "rsi"] = self._rsi
+            self._data = None
 
-        if len(data) >= period:
-            for i in range(period, self._count):
+        # Roll rest of RSI, don't use update to avoid function overhead.
+        if self._roll:
+            for i in range(self._period, count):
                 gain = gains[i]
                 loss = losses[i]
 
-                self._avg_gain = (self._avg_gain * (period - 1) + gain) / period
-                self._avg_loss = (self._avg_loss * (period - 1) + loss) / period
+                self._avg_gain = (
+                    self._avg_gain * (self._period - 1) + gain
+                ) / self._period
+                self._avg_loss = (
+                    self._avg_loss * (self._period - 1) + loss
+                ) / self._period
 
-                self._rsi = self.calculate()
+                self._latest_value = self.calculate()
 
-                if memory:
-                    self._data.at[i, "rsi"] = self._rsi
-
-    def data(self):
-        return self._data["rsi"]
-
-    def calculate(self):
-        if self._avg_loss == 0:
-            return 100  # Avoid division by 0
-
-        rs = self._avg_gain / self._avg_loss
-        return 100 - (100 / (1 + rs))
+                if self._memory:
+                    self._data.at[i, column] = self._latest_value
 
     def update(self, close: float):
         # Get the delta in price, and calculate gain/loss
@@ -86,4 +98,15 @@ class RSI(Indicator):
 
         self._avg_gain = (self._avg_gain * (self._period - 1) + gain) / self._period
         self._avg_loss = (self._avg_loss * (self._period - 1) + loss) / self._period
-        self._rsi = self.calculate()
+        self._latest_value = self.calculate()
+
+        if self._memory:
+            self._data.at[self._count, self._column_names["rsi"]] = self._latest_value
+            self._count += 1
+
+    def calculate(self):
+        if self._avg_loss == 0:
+            return 100  # Avoid division by 0
+
+        rs = self._avg_gain / self._avg_loss
+        return 100 - (100 / (1 + rs))

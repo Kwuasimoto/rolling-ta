@@ -11,23 +11,43 @@ from rolling_ta.logging import logger
 # Math derived from chatGPT + https://www.investopedia.com/terms/s/sma.asp
 class SMA(Indicator):
 
-    _sma = np.nan
     _window: Deque[np.float64]
     _window_sum = np.nan
 
     def __init__(
-        self, data: pd.DataFrame, period: int = 12, memory=True, init=True
+        self,
+        data: pd.DataFrame,
+        period: int = 12,
+        memory: bool = True,
+        init: bool = True,
+        roll: bool = True,
     ) -> None:
-        super().__init__(data, period, memory, init)
+        """Rolling Simple Moving Average indicator
+
+        https://www.investopedia.com/terms/s/sma.asp
+
+        Args:
+            data (pd.DataFrame): The initial dataframe to use. Must contain a "close" column.
+            period (int): Default=12 | Window length.
+            memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
+            init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
+            roll (bool, optional): Default=True | Calculate remaining indicator values upon instantiation.
+        """
+        super().__init__(data, period, memory, init, roll)
         logger.debug(
-            f"Building SMA: [data_len={len(data)}, period={period}, memory={memory}]"
+            f"SMA init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
         )
+
+        self.set_column_names({"sma": f"sma_{self._period}"})
 
         if init:
             self.init()
 
     def init(self):
         close = self._data["close"]
+        count = close.shape[0]
+        column = self._column_names["sma"]
+
         self._window = deque(close[: self._period], maxlen=self._period)
         logger.debug(f"SMA: [window={self._window}]")
 
@@ -37,22 +57,23 @@ class SMA(Indicator):
         logger.debug(f"SMA: [sum={self._window_sum}]")
 
         # Calculate initial SMA
-        self._sma = self.calculate()
+        self._latest_value = self.calculate()
 
         # Perform memory optimization.
         if self._memory:
-            self._count = len(close)
-            self._data[f"sma_{self._period}"] = np.nan
-            self._data.at[self._period - 1, f"sma_{self._period}"] = self._sma
+            self._count = count
+            self._data[column] = np.nan
+            self._data.at[self._period - 1, column] = self._latest_value
         else:
             self._data = None
 
-        # Calculate the rest of the SMA
-        for i in range(self._period, len(close)):
-            self.update(close[i])
+        # Roll the rest of the SMA
+        if self._roll:
+            for i in range(self._period, count):
+                self.update(close[i])
 
-            if self._memory:
-                self._data.at[i, f"sma_{self._period}"] = self._sma
+                if self._memory:
+                    self._data.at[i, column] = self._latest_value
 
     def update(self, close: np.float64):
         # Reduce sum by first value in the deque.
@@ -60,15 +81,14 @@ class SMA(Indicator):
         self._window_sum += close
 
         self._window.append(close)
-        self._sma = self.calculate()
+        self._latest_value = self.calculate()
 
         if self._memory:
-            self._data.at[self._count, f"sma_{self._period}"] = self._sma
+            self._data.at[self._count, self._column_names["sma"]] = self._latest_value
             self._count += 1
 
-    def calculate(self):
-        self._sma = self._window_sum / self._period
-        return self._sma
+        return self._latest_value
 
-    def data(self):
-        return self._data[f"sma_{self._period}"]
+    def calculate(self):
+        self._latest_value = self._window_sum / self._period
+        return self._latest_value
