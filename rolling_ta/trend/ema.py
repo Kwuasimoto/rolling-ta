@@ -12,8 +12,9 @@ class EMA(Indicator):
 
     _close = np.nan
 
-    _window: Deque[np.float64]
-    _window_sum = np.nan
+    _ema: pd.Series
+    _latest_ema = np.nan
+
     _weight = np.nan
 
     def __init__(
@@ -23,7 +24,6 @@ class EMA(Indicator):
         weight: np.float64 = 2.0,
         memory: bool = True,
         init: bool = True,
-        roll: bool = True,
     ) -> None:
         """Rolling Exponential Moving Average indicator
 
@@ -35,13 +35,11 @@ class EMA(Indicator):
             weight (np.float64, optional): Default=2.0 | The weight of the EMA's multiplier.
             memory (bool): Default=True | Memory flag, if false removes all information not required for rsi.update().
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation
-            roll (bool, optional): Default=True | Calculate remaining indicator values upon instantiation
         """
-        super().__init__(data, period, memory, init, roll)
+        super().__init__(data, period, memory, init)
         logger.debug(
             f"EMA init: [data_len={len(data)}, period={period}, memory={memory}]"
         )
-        self.set_column_names({"ema": f"ema_{self._period}"})
 
         self._weight = weight / (period + 1)
 
@@ -50,43 +48,35 @@ class EMA(Indicator):
 
     def init(self):
         close = self._data["close"]
-        count = close.shape[0]
-        column = self._column_names["ema"]
 
-        self._window = deque(close[: self._period], maxlen=self._period)
-        logger.debug(f"EMA: [window={self._window}]")
+        ema = close.ewm(
+            span=self._period,
+            min_periods=self._period,
+            alpha=self._weight,
+            adjust=False,
+        ).mean()
+        self._latest_ema = ema.iloc[-1]
 
-        self._window_sum = np.sum(self._window)
-
-        # Initial EMA calculation is SMA
-        self._latest_value = self._window_sum / self._period
-
+        # Use Memory
         if self._memory:
-            self._count = count
-            self._data[column] = np.nan
-            self._data.at[self._period - 1, column] = self._latest_value
-        else:
-            self._data = None
+            self._count = close.shape[0]
+            self._ema = ema
 
-        if self._roll:
-            for i in range(self._period, count):
-                self.update(close[i])
-
-                if self._memory:
-                    self._data.at[i, column] = self._latest_value
+        self._data = None
 
     def update(self, close: np.float64):
         self._close = close
-        self.calculate()
+        self._latest_ema = self.calculate()
 
         if self._memory:
-            self._data.at[self._count, self._column_names["ema"]] = self._latest_value
+            self._ema[self._count] = self._latest_ema
             self._count += 1
 
-        return self._latest_value
-
     def calculate(self):
-        self._latest_value = (
-            (self._close - self._latest_value) * self._weight
-        ) + self._latest_value
-        return self._latest_value
+        return ((self._close - self._latest_ema) * self._weight) + self._latest_ema
+
+    def ema(self):
+        return self._ema
+
+    def latest_ema(self):
+        return self._latest_ema

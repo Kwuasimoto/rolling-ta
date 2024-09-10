@@ -14,13 +14,14 @@ class SMA(Indicator):
     _window: Deque[np.float64]
     _window_sum = np.nan
 
+    _sma = pd.Series
+
     def __init__(
         self,
         data: pd.DataFrame,
         period: int = 12,
         memory: bool = True,
         init: bool = True,
-        roll: bool = True,
     ) -> None:
         """Rolling Simple Moving Average indicator
 
@@ -31,64 +32,61 @@ class SMA(Indicator):
             period (int): Default=12 | Window length.
             memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
-            roll (bool, optional): Default=True | Calculate remaining indicator values upon instantiation.
         """
-        super().__init__(data, period, memory, init, roll)
+        super().__init__(data, period, memory, init)
         logger.debug(
             f"SMA init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
         )
-
-        self.set_column_names({"sma": f"sma_{self._period}"})
 
         if init:
             self.init()
 
     def init(self):
         close = self._data["close"]
-        count = close.shape[0]
-        column = self._column_names["sma"]
 
-        self._window = deque(close[: self._period], maxlen=self._period)
-        logger.debug(f"SMA: [window={self._window}]")
-
-        # Use a deque to maintain O(1) efficiency
+        self._window = deque(close[-self._period :], maxlen=self._period)
         self._window_sum = np.sum(self._window)
 
-        logger.debug(f"SMA: [sum={self._window_sum}]")
+        sma = close.rolling(window=self._period, min_periods=self._period).mean()
+        self._latest_sma = sma.iloc[-1]
 
-        # Calculate initial SMA
-        self._latest_value = self.calculate()
-
-        # Perform memory optimization.
+        # Use memory for sma.
         if self._memory:
-            self._count = count
-            self._data[column] = np.nan
-            self._data.at[self._period - 1, column] = self._latest_value
-        else:
-            self._data = None
+            self._count = close.shape[0]
+            self._sma = sma
 
-        # Roll the rest of the SMA
-        if self._roll:
-            for i in range(self._period, count):
-                self.update(close[i])
+        # Remove dataframe to avoid memory consumption.
+        self._data = None
 
-                if self._memory:
-                    self._data.at[i, column] = self._latest_value
+    def update(self, data: pd.Series):
+        """Perform rolling update.
 
-    def update(self, close: np.float64):
-        # Reduce sum by first value in the deque.
-        self._window_sum -= self._window[0]
-        self._window_sum += close
+        data must be a pd.Series object fetched using .iloc[index | condition] with shape(6,)
+
+        Args:
+            data (pd.Series): pd.Series with a "close" column.
+
+        Returns:
+            _type_: _description_
+        """
+        close = data["close"]
+        first_close = self._window[0]
 
         self._window.append(close)
-        self._latest_value = self.calculate()
+        next_close = self._window[-1]
+
+        self._window_sum = (self._window_sum - first_close) + next_close
+        self._latest_sma = self.calculate()
 
         if self._memory:
-            self._data.at[self._count, self._column_names["sma"]] = self._latest_value
+            self._sma[self._count] = self._latest_sma
             self._count += 1
 
-        return self._latest_value
-
     def calculate(self):
-        self._latest_value = self._window_sum / self._period
-        return self._latest_value
+        return self._window_sum / self._period
+
+    def sma(self):
+        return self._sma
+
+    def latest_sma(self):
+        return self._latest_sma

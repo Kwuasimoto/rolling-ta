@@ -1,5 +1,6 @@
-import numpy as np
 import pandas as pd
+
+from collections import namedtuple
 
 
 class Indicator:
@@ -8,10 +9,7 @@ class Indicator:
     _period: int
     _memory: bool
     _init: bool
-    _roll: bool
-    _column_names: dict
     _count = 0
-    _latest_value = np.nan
 
     def __init__(
         self,
@@ -19,7 +17,6 @@ class Indicator:
         period: int,
         memory: bool,
         init: bool,
-        roll: bool,
     ) -> None:
         if len(data) < period:
             raise ArithmeticError(
@@ -30,26 +27,12 @@ class Indicator:
         self._period = period
         self._memory = memory
         self._init = init
-        self._roll = roll
 
     def init(self):
         pass
 
-    def update(self):
+    def update(self, data: pd.Series):
         pass
 
     def calculate(self):
         pass
-
-    def data(self):
-        if not self._memory:
-            raise MemoryError(
-                "Memory is set to false so Dataframe was deleted. Use .latest_value() to get the most recent value or set memory to True"
-            )
-        return self._data
-
-    def latest_value(self):
-        return self._latest_value
-
-    def set_column_names(self, names: dict):
-        self._column_names = names
