@@ -182,6 +182,8 @@ class MFI(Indicator):
         Raises:
             MemoryError: if function is called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("MFI._memory = False")
         return self._mfi
 
     def mfi_latest(self):

@@ -137,6 +137,8 @@ class SMA(Indicator):
         Raises:
             MemoryError: If function called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("SMA._memory = False")
         return self._sma
 
     def sma_latest(self):

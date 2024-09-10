@@ -177,7 +177,12 @@ class BollingerBands(Indicator):
 
         Returns:
             pd.Series: A pandas Series containing the SMA values.
+
+        Raises:
+            MemoryError: If function called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("BB._memory = False")
         return self._sma.sma()
 
     def uband(self):
@@ -186,7 +191,12 @@ class BollingerBands(Indicator):
 
         Returns:
             pd.Series: A pandas Series containing the upper Bollinger Band values.
+
+        Raises:
+            MemoryError: If function called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("BB._memory = False")
         return self._uband
 
     def lband(self):
@@ -195,7 +205,12 @@ class BollingerBands(Indicator):
 
         Returns:
             pd.Series: A pandas Series containing the lower Bollinger Band values.
+
+        Raises:
+            MemoryError: If function called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("BB._memory = False")
         return self._lband
 
     def sma_latest(self):

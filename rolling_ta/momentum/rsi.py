@@ -174,6 +174,8 @@ class RSI(Indicator):
         Raises:
             MemoryError: if function called and memory = False
         """
+        if not self._memory:
+            raise MemoryError("RSI._memory = False")
         return self._rsi
 
     def rsi_latest(self):

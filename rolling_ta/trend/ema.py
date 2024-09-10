@@ -138,6 +138,8 @@ class EMA(Indicator):
         Raises:
             MemoryError: If function called and memory=False
         """
+        if not self._memory:
+            raise MemoryError("EMA._memory = False")
         return self._ema
 
     def ema_latest(self):
