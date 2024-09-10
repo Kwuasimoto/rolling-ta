@@ -21,7 +21,7 @@ class RSI(Indicator):
     _emw_loss = np.nan
 
     _rsi: pd.Series
-    _latest_rsi = np.nan
+    _rsi_latest = np.nan
 
     def __init__(
         self,
@@ -86,7 +86,7 @@ class RSI(Indicator):
         emw_rsi = (100 * emw_gains) / (emw_gains + emw_losses)
         # emw_rsi = 100 - (100 / (1 + (emw_gains / emw_losses)))
         rsi[self._period :] = emw_rsi[self._period :]
-        self._latest_rsi = rsi.iloc[-1]
+        self._rsi_latest = rsi.iloc[-1]
 
         if self._memory:
             self._rsi = rsi
@@ -126,14 +126,14 @@ class RSI(Indicator):
         # REFACTOR (+1 mul, -1 sub, -1 div): (100 * a) / (a + b)
 
         # self._rsi[self._count] = 100 - (100 / (1 + self._emw_gain / self._emw_loss))
-        self._latest_rsi = (100 * self._emw_gain) / (self._emw_gain + self._emw_loss)
+        self._rsi_latest = (100 * self._emw_gain) / (self._emw_gain + self._emw_loss)
 
         if self._memory:
-            self._rsi[self._count] = self._latest_rsi
+            self._rsi[self._count] = self._rsi_latest
             self._count += 1
 
     def rsi(self):
         return self._rsi
 
-    def latest_rsi(self):
-        return self._latest_rsi
+    def rsi_latest(self):
+        return self._rsi_latest

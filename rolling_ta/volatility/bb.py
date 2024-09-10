@@ -12,8 +12,8 @@ class BollingerBands(Indicator):
 
     _weight = np.nan
 
-    _latest_uband = np.nan
-    _latest_lband = np.nan
+    _uband_latest = np.nan
+    _lband_latest = np.nan
 
     _uband: pd.Series
     _lband: pd.Series
@@ -61,15 +61,15 @@ class BollingerBands(Indicator):
         uband = sma + std_weighted
         lband = sma - std_weighted
 
-        self._latest_uband = uband.iloc[-1]
-        self._latest_lband = lband.iloc[-1]
+        self._uband_latest = uband.iloc[-1]
+        self._lband_latest = lband.iloc[-1]
 
         # Calculate initital BB Values
         std = np.std(self._sma._window, ddof=0)
         std_weighted = std * self._weight
 
-        self._latest_uband = self._sma._latest_sma + std_weighted
-        self._latest_lband = self._sma._latest_sma - std_weighted
+        self._uband_latest = self._sma._sma_latest + std_weighted
+        self._lband_latest = self._sma._sma_latest - std_weighted
 
         if self._memory:
             self._count = count
@@ -87,12 +87,12 @@ class BollingerBands(Indicator):
         std = np.std(self._sma._window, ddof=0)
         std_weighted = std * self._weight
 
-        self._latest_uband = self._sma._latest_sma + std_weighted
-        self._latest_lband = self._sma._latest_sma - std_weighted
+        self._uband_latest = self._sma._sma_latest + std_weighted
+        self._lband_latest = self._sma._sma_latest - std_weighted
 
         if self._memory:
-            self._uband[self._count] = self._latest_uband
-            self._lband[self._count] = self._latest_lband
+            self._uband[self._count] = self._uband_latest
+            self._lband[self._count] = self._lband_latest
             self._count += 1
 
     def sma(self):
@@ -104,11 +104,11 @@ class BollingerBands(Indicator):
     def lband(self):
         return self._lband
 
-    def latest_sma(self):
-        return self._sma._latest_sma
+    def sma_latest(self):
+        return self._sma._sma_latest
 
-    def latest_uband(self):
-        return self._latest_uband
+    def uband_latest(self):
+        return self._uband_latest
 
-    def latest_lband(self):
-        return self._latest_lband
+    def lband_latest(self):
+        return self._lband_latest

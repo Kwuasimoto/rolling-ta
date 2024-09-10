@@ -11,10 +11,11 @@ from rolling_ta.logging import logger
 # Math derived from chatGPT + https://www.investopedia.com/terms/s/sma.asp
 class SMA(Indicator):
 
+    _sma: pd.Series
+    _sma_latest = np.nan
+
     _window: Deque[np.float64]
     _window_sum = np.nan
-
-    _sma: pd.Series
 
     def __init__(
         self,
@@ -48,7 +49,7 @@ class SMA(Indicator):
         self._window_sum = np.sum(self._window)
 
         sma = close.rolling(window=self._period, min_periods=self._period).mean()
-        self._latest_sma = sma.iloc[-1]
+        self._sma_latest = sma.iloc[-1]
 
         # Use memory for sma.
         if self._memory:
@@ -70,20 +71,19 @@ class SMA(Indicator):
             _type_: _description_
         """
         close = data["close"]
+
         first_close = self._window[0]
-
         self._window.append(close)
-        next_close = self._window[-1]
 
-        self._window_sum = (self._window_sum - first_close) + next_close
-        self._latest_sma = self._window_sum / self._period
+        self._window_sum = (self._window_sum - first_close) + close
+        self._sma_latest = self._window_sum / self._period
 
         if self._memory:
-            self._sma[self._count] = self._latest_sma
+            self._sma[self._count] = self._sma_latest
             self._count += 1
 
     def sma(self):
         return self._sma
 
-    def latest_sma(self):
-        return self._latest_sma
+    def sma_latest(self):
+        return self._sma_latest

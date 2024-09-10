@@ -13,7 +13,7 @@ class EMA(Indicator):
     _close = np.nan
 
     _ema: pd.Series
-    _latest_ema = np.nan
+    _ema_latest = np.nan
 
     _weight = np.nan
 
@@ -55,7 +55,7 @@ class EMA(Indicator):
             alpha=self._weight,
             adjust=False,
         ).mean()
-        self._latest_ema = ema.iloc[-1]
+        self._ema_latest = ema.iloc[-1]
 
         # Use Memory
         if self._memory:
@@ -66,16 +66,16 @@ class EMA(Indicator):
 
     def update(self, close: np.float64):
         self._close = close
-        self._latest_ema = (
-            (self._close - self._latest_ema) * self._weight
-        ) + self._latest_ema
+        self._ema_latest = (
+            (self._close - self._ema_latest) * self._weight
+        ) + self._ema_latest
 
         if self._memory:
-            self._ema[self._count] = self._latest_ema
+            self._ema[self._count] = self._ema_latest
             self._count += 1
 
     def ema(self):
         return self._ema
 
-    def latest_ema(self):
-        return self._latest_ema
+    def ema_latest(self):
+        return self._ema_latest
