@@ -14,7 +14,7 @@ class SMA(Indicator):
     _window: Deque[np.float64]
     _window_sum = np.nan
 
-    _sma = pd.Series
+    _sma: pd.Series
 
     def __init__(
         self,
@@ -76,14 +76,11 @@ class SMA(Indicator):
         next_close = self._window[-1]
 
         self._window_sum = (self._window_sum - first_close) + next_close
-        self._latest_sma = self.calculate()
+        self._latest_sma = self._window_sum / self._period
 
         if self._memory:
             self._sma[self._count] = self._latest_sma
             self._count += 1
-
-    def calculate(self):
-        return self._window_sum / self._period
 
     def sma(self):
         return self._sma

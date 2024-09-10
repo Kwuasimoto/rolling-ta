@@ -33,6 +33,3 @@ class Indicator:
 
     def update(self, data: pd.Series):
         pass
-
-    def calculate(self):
-        pass

@@ -19,6 +19,8 @@ from rolling_ta.trend import EMA, SMA
 from rolling_ta.momentum import RSI
 from rolling_ta.volume import MFI
 
+from time import time
+
 # FN Overhead = 6-7 seconds for 100m calls
 # def empty_fn():
 #     pass
@@ -110,22 +112,26 @@ loader = CSVLoader()
 
 if __name__ == "__main__":
     data = loader.read_resource()
-    copy = data.loc[:109].copy()
+    copy = data.copy()
     # logger.debug(f"RSI Input: [data=\n{copy[:26]}\n]")
 
-    expected = RSIIndicator(copy["close"])
-    expected_rsi = expected.rsi()
+    # expected = RSIIndicator(copy["close"])
+    # expected_rsi = expected.rsi()
+    start = time()
+    iterations = range(100)
+    logger.info("Started.")
 
-    rolling = RSI(copy[:99])
-    rolling_rsi = rolling.rsi()
+    for iter in iterations:
+        rolling = BB(copy[:28])
+        logger.info("Updating.")
+        for i, series in copy[28:].iterrows():
+            rolling.update(series)
 
-    # print(rolling_rsi)
-
-    for i, series in copy[99:109].iterrows():
-        rolling.update(series)
-
-    for i, [e, r] in enumerate(zip(expected_rsi, rolling_rsi)):
-        if i <= 99:
-            logger.debug(f"Test: [i={i}, e={round(e, 2)}, r={round(r, 2)}]")
-        else:
-            logger.debug(f"Test: [i={i}, e={round(e, 2)}, r_updated={round(r, 2)}]")
+    duration = time() - start
+    logger.info(f"Finished: [duration={duration}, avg_dur={duration/len(iterations)}]")
+    # logger.info(f"RSI: [data=\n{rolling.()}\n]")
+    # for i, [e, r] in enumerate(zip(expected_rsi, rolling_rsi)):
+    #     if i <= 99:
+    #         logger.debug(f"Test: [i={i}, e={round(e, 2)}, r={round(r, 2)}]")
+    #     else:
+    #         logger.debug(f"Test: [i={i}, e={round(e, 2)}, r_updated={round(r, 2)}]")

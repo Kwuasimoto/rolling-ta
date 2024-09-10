@@ -21,6 +21,7 @@ class RSI(Indicator):
     _emw_loss = np.nan
 
     _rsi: pd.Series
+    _latest_rsi = np.nan
 
     def __init__(
         self,
@@ -55,17 +56,19 @@ class RSI(Indicator):
         losses = np.where(delta < 0, -delta, 0)
 
         # Phase-1 Start (SMA)
-        initial_avg_gains = np.mean(gains[: self._period])
-        initial_avg_losses = np.mean(losses[: self._period])
+        initial_avg_gain = np.mean(gains[: self._period])
+        initial_avg_loss = np.mean(losses[: self._period])
 
-        initial_rs = (
-            initial_avg_gains / initial_avg_losses
-            if initial_avg_losses != 0
-            else np.inf
-        )
-        initial_rsi = 100 - (100 / (1 + initial_rs)) if initial_avg_losses != 0 else 100
+        # initial_rs = (
+        #     initial_avg_gains / initial_avg_losses
+        #     if initial_avg_losses != 0
+        #     else np.inf
+        # )
+        # initial_rsi = 100 - (100 / (1 + initial_rs)) if initial_avg_losses != 0 else 100
+        # (100 * emw_gains) / (emw_gains + emw_losses)
+        initial_rsi = (100 * initial_avg_gain) / (initial_avg_gain + initial_avg_loss)
 
-        rsi = pd.Series(index=self._data.index, dtype=np.float64)
+        rsi = pd.Series(index=self._data.index)
         rsi[self._period - 1] = initial_rsi
         # Phase-1 End
 
@@ -80,9 +83,10 @@ class RSI(Indicator):
             alpha=self._alpha, min_periods=self._period, adjust=False
         ).mean()
 
-        emw_rs = emw_gains / emw_losses
-        emw_rsi = 100 - (100 / (1 + emw_rs))
+        emw_rsi = (100 * emw_gains) / (emw_gains + emw_losses)
+        # emw_rsi = 100 - (100 / (1 + (emw_gains / emw_losses)))
         rsi[self._period :] = emw_rsi[self._period :]
+        self._latest_rsi = rsi.iloc[-1]
 
         if self._memory:
             self._rsi = rsi
@@ -90,7 +94,7 @@ class RSI(Indicator):
 
         self._data = None
 
-        # Store information require for rolling updates.
+        # Store information required for rolling updates.
         self._prev_price = close.iloc[-1]
         self._gains = deque(gains[-self._period :], maxlen=self._period)
         self._losses = deque(losses[-self._period :], maxlen=self._period)
@@ -111,21 +115,25 @@ class RSI(Indicator):
         self._losses.append(loss)
 
         # FORMULA: emwa_new = alpha * value + (1 - alpha) * ewma_prev
-        self._emw_gain = self._alpha * gain + (1 - self._alpha) * self._emw_gain
-        self._emw_loss = self._alpha * loss + (1 - self._alpha) * self._emw_loss
+        # REFACTOR (-1 mul): alpha * (value - ewma_prev) + ewma_prev
 
-        emw_rs = self._emw_gain / self._emw_loss
-        emw_rsi = 100 - (100 / (1 + emw_rs))
-        self._rsi[self._count] = emw_rsi
+        # self._emw_gain = self._alpha * gain + (1 - self._alpha) * self._emw_gain
+        # self._emw_loss = self._alpha * loss + (1 - self._alpha) * self._emw_loss
+        self._emw_gain = self._alpha * (gain - self._emw_gain) + self._emw_gain
+        self._emw_loss = self._alpha * (loss - self._emw_loss) + self._emw_loss
 
-        self._count += 1
+        # FORMULA: 100 - (100 / (1 + a / b))
+        # REFACTOR (+1 mul, -1 sub, -1 div): (100 * a) / (a + b)
 
-    def calculate(self):
-        if self._emw_loss == 0:
-            return 100  # Avoid division by 0
+        # self._rsi[self._count] = 100 - (100 / (1 + self._emw_gain / self._emw_loss))
+        self._latest_rsi = (100 * self._emw_gain) / (self._emw_gain + self._emw_loss)
 
-        relative_strength = self._emw_gain / self._emw_loss
-        return 100 - (100 / (1 + relative_strength))
+        if self._memory:
+            self._rsi[self._count] = self._latest_rsi
+            self._count += 1
 
     def rsi(self):
         return self._rsi
+
+    def latest_rsi(self):
+        return self._latest_rsi

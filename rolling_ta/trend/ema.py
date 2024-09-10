@@ -66,14 +66,13 @@ class EMA(Indicator):
 
     def update(self, close: np.float64):
         self._close = close
-        self._latest_ema = self.calculate()
+        self._latest_ema = (
+            (self._close - self._latest_ema) * self._weight
+        ) + self._latest_ema
 
         if self._memory:
             self._ema[self._count] = self._latest_ema
             self._count += 1
-
-    def calculate(self):
-        return ((self._close - self._latest_ema) * self._weight) + self._latest_ema
 
     def ema(self):
         return self._ema

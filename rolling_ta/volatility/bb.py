@@ -42,7 +42,7 @@ class BollingerBands(Indicator):
             f"BollingerBands init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
         )
 
-        self._sma = SMA(self._data, self._period, False, False)
+        self._sma = SMA(self._data, self._period, self._memory, False)
         self._weight = weight
 
         if init:
@@ -65,7 +65,11 @@ class BollingerBands(Indicator):
         self._latest_lband = lband.iloc[-1]
 
         # Calculate initital BB Values
-        self.calculate()
+        std = np.std(self._sma._window, ddof=0)
+        std_weighted = std * self._weight
+
+        self._latest_uband = self._sma._latest_sma + std_weighted
+        self._latest_lband = self._sma._latest_sma - std_weighted
 
         if self._memory:
             self._count = count
@@ -80,19 +84,25 @@ class BollingerBands(Indicator):
         self._sma.update(close)
 
         # Calculate initital BB Values
-        self.calculate()
+        std = np.std(self._sma._window, ddof=0)
+        std_weighted = std * self._weight
+
+        self._latest_uband = self._sma._latest_sma + std_weighted
+        self._latest_lband = self._sma._latest_sma - std_weighted
 
         if self._memory:
             self._uband[self._count] = self._latest_uband
             self._lband[self._count] = self._latest_lband
             self._count += 1
 
-    def calculate(self):
-        std = np.std(self._sma._window, ddof=0)
-        std_weighted = std * self._weight
+    def sma(self):
+        return self._sma.sma()
 
-        self._latest_uband = self._sma._latest_sma + std_weighted
-        self._latest_lband = self._sma._latest_sma - std_weighted
+    def uband(self):
+        return self._uband
+
+    def lband(self):
+        return self._lband
 
     def latest_sma(self):
         return self._sma._latest_sma
