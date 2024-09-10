@@ -143,7 +143,7 @@ class MFI(Indicator):
         close = data["close"]
         volume = data["volume"]
 
-        # Convert deque to pandas Series
+        # Calculate typical price
         typical_price = (high + low + close) / 3
 
         # Get up_down marker
