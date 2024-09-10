@@ -10,13 +10,61 @@ from collections import deque
 
 # Math derived from chatGPT + https://www.investopedia.com/terms/r/rsi.asp
 class RSI(Indicator):
-    """Rolling RSI Indicator https://www.investopedia.com/terms/r/rsi.asp"""
+    """
+    Relative Strength Index (RSI) indicator.
+
+    The RSI is a momentum oscillator that measures the speed and change of price
+    movements. It oscillates between 0 and 100 and is used to identify overbought
+    or oversold conditions in an asset. This class calculates the RSI using
+    historical price data over a specified period.
+
+    Material
+    --------
+        https://www.investopedia.com/terms/r/rsi.asp
+        https://pypi.org/project/ta/
+
+    Attributes
+    ----------
+    _prev_price : float
+        The previous closing price used to calculate the price change.
+    _alpha : float
+        The smoothing factor for exponential moving averages (EMA).
+    _emw_gain : float
+        The exponentially weighted moving average of gains.
+    _emw_loss : float
+        The exponentially weighted moving average of losses.
+    _rsi : pd.Series
+        A pandas Series storing the calculated RSI values for each period.
+    _rsi_latest : float
+        The latest RSI value.
+
+    Methods
+    -------
+    **__init__(data: pd.DataFrame, period: int = 14, memory: bool = True, init: bool = True)** -> None
+
+        Initializes the RSI indicator with the given data, period, and options.
+
+    **init()** -> None
+
+        Calculates the initial RSI values based on the provided data.
+
+    **update(data: pd.Series)** -> None
+
+        Updates the RSI based on new incoming data.
+
+    **rsi()** -> pd.Series
+
+        Returns the stored RSI values if memory is enabled.
+
+    **rsi_latest()** -> float
+
+        Returns the latest RSI value.
+    """
 
     _prev_price = np.nan
 
     _alpha = np.nan
-    _gains: Deque
-    _losses: Deque
+
     _emw_gain = np.nan
     _emw_loss = np.nan
 
@@ -30,16 +78,14 @@ class RSI(Indicator):
         memory: bool = True,
         init: bool = True,
     ) -> None:
-        """Rolling RSI indicator
-
-        https://www.investopedia.com/terms/r/rsi.asp
+        """
+        Initialize the RSI indicator.
 
         Args:
-            data (pd.DataFrame): The initial dataframe to use. Must contain a "close" column.
-            period (int): Default=14 | Window length.
-            memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
-            init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
-            roll (bool, optional): Default=True | Calculate remaining indicator values upon instantiation.
+            data (pd.DataFrame): The initial dataframe containing price data with a 'close' column.
+            period (int): Default=14 | The period over which to calculate the RSI.
+            memory (bool): Default=True | Whether to store RSI values in memory.
+            init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
         """
         super().__init__(data, period, memory, init)
         self._alpha = 1 / period
@@ -47,8 +93,13 @@ class RSI(Indicator):
             self.init()
 
     def init(self):
+        """
+        Calculate the initial RSI values based on historical data.
+
+        Args:
+            None
+        """
         close = self._data["close"]
-        # Store the prev price for subsequent RSI updates.
 
         delta = close.diff(1)
 
@@ -59,13 +110,6 @@ class RSI(Indicator):
         initial_avg_gain = np.mean(gains[: self._period])
         initial_avg_loss = np.mean(losses[: self._period])
 
-        # initial_rs = (
-        #     initial_avg_gains / initial_avg_losses
-        #     if initial_avg_losses != 0
-        #     else np.inf
-        # )
-        # initial_rsi = 100 - (100 / (1 + initial_rs)) if initial_avg_losses != 0 else 100
-        # (100 * emw_gains) / (emw_gains + emw_losses)
         initial_rsi = (100 * initial_avg_gain) / (initial_avg_gain + initial_avg_loss)
 
         rsi = pd.Series(index=self._data.index)
@@ -84,7 +128,6 @@ class RSI(Indicator):
         ).mean()
 
         emw_rsi = (100 * emw_gains) / (emw_gains + emw_losses)
-        # emw_rsi = 100 - (100 / (1 + (emw_gains / emw_losses)))
         rsi[self._period :] = emw_rsi[self._period :]
         self._rsi_latest = rsi.iloc[-1]
 
@@ -94,16 +137,17 @@ class RSI(Indicator):
 
         self._data = None
 
-        # Store information required for rolling updates.
         self._prev_price = close.iloc[-1]
-        self._gains = deque(gains[-self._period :], maxlen=self._period)
-        self._losses = deque(losses[-self._period :], maxlen=self._period)
-
         self._emw_gain = emw_gains.iloc[-1]
         self._emw_loss = emw_losses.iloc[-1]
 
     def update(self, data: pd.Series):
-        # Get the delta in price, and calculate gain/loss
+        """
+        Update the RSI with new price data.
+
+        Args:
+            data (pd.Series): The latest data containing a 'close' price.
+        """
         close = data["close"]
         delta = close - self._prev_price
         self._prev_price = close
@@ -111,21 +155,9 @@ class RSI(Indicator):
         gain = max(delta, 0)
         loss = -min(delta, 0)
 
-        self._gains.append(gain)
-        self._losses.append(loss)
-
-        # FORMULA: emwa_new = alpha * value + (1 - alpha) * ewma_prev
-        # REFACTOR (-1 mul): alpha * (value - ewma_prev) + ewma_prev
-
-        # self._emw_gain = self._alpha * gain + (1 - self._alpha) * self._emw_gain
-        # self._emw_loss = self._alpha * loss + (1 - self._alpha) * self._emw_loss
         self._emw_gain = self._alpha * (gain - self._emw_gain) + self._emw_gain
         self._emw_loss = self._alpha * (loss - self._emw_loss) + self._emw_loss
 
-        # FORMULA: 100 - (100 / (1 + a / b))
-        # REFACTOR (+1 mul, -1 sub, -1 div): (100 * a) / (a + b)
-
-        # self._rsi[self._count] = 100 - (100 / (1 + self._emw_gain / self._emw_loss))
         self._rsi_latest = (100 * self._emw_gain) / (self._emw_gain + self._emw_loss)
 
         if self._memory:
@@ -133,7 +165,22 @@ class RSI(Indicator):
             self._count += 1
 
     def rsi(self):
+        """
+        Return the stored RSI values.
+
+        Returns:
+            pd.Series: The RSI values calculated over the historical data if memory is enabled.
+
+        Raises:
+            MemoryError: if function called and memory = False
+        """
         return self._rsi
 
     def rsi_latest(self):
+        """
+        Return the most recent RSI value.
+
+        Returns:
+            float: The latest RSI value.
+        """
         return self._rsi_latest
