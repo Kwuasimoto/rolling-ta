@@ -99,7 +99,7 @@ class MFI(Indicator):
         # [nan, 1, 2]
         prev_typical = typical_price.shift(1)
 
-        # Market whether movement is up(1) down(-1) or neutral(0)
+        # Mark whether movement is up(1) down(-1) or neutral(0)
         up_down = np.where(
             typical_price > prev_typical,
             1,
