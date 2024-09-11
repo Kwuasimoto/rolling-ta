@@ -4,7 +4,7 @@ import importlib.resources as pkg
 
 import pandas as pd
 
-from ta.volatility import BollingerBands
+from ta.volatility import BollingerBands, AverageTrueRange
 from ta.trend import EMAIndicator, SMAIndicator, MACD
 
 from ta.momentum import RSIIndicator
@@ -13,7 +13,7 @@ from ta.volume import MFIIndicator
 from rolling_ta.data import CSVLoader
 from rolling_ta.logging import logger
 
-from rolling_ta.volatility import BollingerBands as BB
+from rolling_ta.volatility import BollingerBands as BB, AverageTrueRange as ATR
 from rolling_ta.trend import EMA, SMA
 
 from rolling_ta.momentum import RSI
@@ -30,17 +30,25 @@ loader = CSVLoader()
 #     logger.debug(f"\n{values}\n")
 
 
+# -- Building Zone --
+
+# if __name__ == "__main__":
+#     data = loader.read_resource()
+#     copy = data[:28].copy()
+
+#     expected = ATR(copy)
+
 # -- Comparison Tests --
 
 if __name__ == "__main__":
     data = loader.read_resource()
-    copy = data[:85].copy()
+    copy = data[:100].copy()
 
-    expected = MFIIndicator(copy["high"], copy["low"], copy["close"], copy["volume"])
-    expected_series = expected.money_flow_index()
+    expected = AverageTrueRange(copy["high"], copy["low"], copy["close"])
+    expected_series = expected.average_true_range()
 
-    rolling = MFI(copy.iloc[:80])
-    rolling_series = rolling.mfi()
+    rolling = ATR(copy[:80])
+    rolling_series = rolling.atr()
 
     for i, series in copy.iloc[80:].iterrows():
         rolling.update(series)
@@ -53,19 +61,19 @@ if __name__ == "__main__":
 
 # -- Speed Tests --
 
-# if __name__ == "__main__":
-#     data = loader.read_resource()
-#     copy = data.copy()
+if __name__ == "__main__":
+    data = loader.read_resource()
+    copy = data.copy()
 
-#     start = time()
-#     iterations = range(10)
-#     logger.info("Started.")
+    start = time()
+    iterations = range(1)
+    logger.info("Started.")
 
-#     for iter in iterations:
-#         rolling = MFI(copy[:28])
-#         logger.info("Updating.")
-#         for i, series in copy[28:].iterrows():
-#             rolling.update(series)
+    for iter in iterations:
+        rolling = ATR(copy)
+        # logger.info("Updating.")
+        # for i, series in copy[28:].iterrows():
+        #     rolling.update(series)
 
-#     duration = time() - start
-#     logger.info(f"Finished: [duration={duration}, avg_dur={duration/len(iterations)}]")
+    duration = time() - start
+    logger.info(f"Finished: [duration={duration}, avg_dur={duration/len(iterations)}]")

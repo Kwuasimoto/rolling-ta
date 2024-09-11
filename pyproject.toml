@@ -1,6 +1,6 @@
 [project]
 name = "rolling_ta"
-version = "0.6"
+version = "0.7"
 authors = [
     {name="Kwuasimoto", email="thomasdouglasshank@gmail.com"}
 ]
@@ -16,7 +16,7 @@ classifiers = [
 packages = ["rolling_ta"]
 
 [project.urls]
-Homepage = "https://github.com/Kwuasimoto/test-pypi"
+Homepage = "https://github.com/Kwuasimoto/rolling-ta"
 
 [project.optional-dependencies]
 dev = ["black"]
