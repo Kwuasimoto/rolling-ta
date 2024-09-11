@@ -5,7 +5,7 @@ import importlib.resources as pkg
 import pandas as pd
 
 from ta.volatility import BollingerBands
-from ta.trend import EMAIndicator, SMAIndicator
+from ta.trend import EMAIndicator, SMAIndicator, MACD
 
 from ta.momentum import RSIIndicator
 from ta.volume import MFIIndicator
@@ -38,13 +38,9 @@ if __name__ == "__main__":
 
     expected = MFIIndicator(copy["high"], copy["low"], copy["close"], copy["volume"])
     expected_series = expected.money_flow_index()
-    # expected = RSIIndicator(copy["close"])
-    # expected_series = expected.rsi()
 
     rolling = MFI(copy.iloc[:80])
     rolling_series = rolling.mfi()
-    # rolling = RSI(copy.iloc[:80])
-    # rolling_series = rolling.rsi()
 
     for i, series in copy.iloc[80:].iterrows():
         rolling.update(series)

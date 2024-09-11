@@ -1,10 +1,10 @@
 [project]
 name = "rolling_ta"
-version = "0.5"
+version = "0.6"
 authors = [
     {name="Kwuasimoto", email="thomasdouglasshank@gmail.com"}
 ]
-description = "Simple, lightweight single responsibility API for performing near-incremental technical analysis indicator calculations using Pandas."
+description = "Simple, lightweight single responsibility API for performing near-incremental technical analysis indicator calculations leveraging Pandas and Numpy."
 dependencies = ["pandas==2.2.2"]
 readme = "README.md"
 requires-python = ">=3.8"
