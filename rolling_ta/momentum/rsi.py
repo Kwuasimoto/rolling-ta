@@ -74,8 +74,9 @@ class RSI(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period: int = 14,
+        period_config: int = 14,
         memory: bool = True,
+        retention: int = 20000,
         init: bool = True,
     ) -> None:
         """
@@ -85,20 +86,17 @@ class RSI(Indicator):
             data (pd.DataFrame): The initial dataframe containing price data with a 'close' column.
             period (int): Default=14 | The period over which to calculate the RSI.
             memory (bool): Default=True | Whether to store RSI values in memory.
+            retention (int): Default=20000 | The maximum number of RSI values to store in memory
             init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
         """
-        super().__init__(data, period, memory, init)
-        self._alpha = 1 / period
+        super().__init__(data, period_config, memory, retention, init)
+
+        self._alpha = 1 / period_config
         if init:
             self.init()
 
     def init(self):
-        """
-        Calculate the initial RSI values based on historical data.
-
-        Args:
-            None
-        """
+        """Calculate the initial RSI values based on historical data."""
         close = self._data["close"]
 
         delta = close.diff(1)
@@ -107,13 +105,13 @@ class RSI(Indicator):
         losses = np.where(delta < 0, -delta, 0)
 
         # Phase-1 Start (SMA)
-        initial_avg_gain = np.mean(gains[: self._period])
-        initial_avg_loss = np.mean(losses[: self._period])
+        initial_avg_gain = np.mean(gains[: self._period_config])
+        initial_avg_loss = np.mean(losses[: self._period_config])
 
         initial_rsi = (100 * initial_avg_gain) / (initial_avg_gain + initial_avg_loss)
 
         rsi = pd.Series(index=self._data.index)
-        rsi[self._period - 1] = initial_rsi
+        rsi[self._period_config - 1] = initial_rsi
         # Phase-1 End
 
         # Phase 2 Start (EMA)
@@ -121,25 +119,28 @@ class RSI(Indicator):
         emw_losses = pd.Series(losses, index=close.index)
 
         emw_gains = emw_gains.ewm(
-            alpha=self._alpha, min_periods=self._period, adjust=False
+            alpha=self._alpha, min_periods=self._period_config, adjust=False
         ).mean()
         emw_losses = emw_losses.ewm(
-            alpha=self._alpha, min_periods=self._period, adjust=False
+            alpha=self._alpha, min_periods=self._period_config, adjust=False
         ).mean()
 
         emw_rsi = (100 * emw_gains) / (emw_gains + emw_losses)
-        rsi[self._period :] = emw_rsi[self._period :]
+        rsi[self._period_config :] = emw_rsi[self._period_config :]
         self._rsi_latest = rsi.iloc[-1]
 
         if self._memory:
             self._rsi = rsi
             self._count = close.shape[0]
 
-        self._data = None
+            # if self._retention:
+            #     self.apply_retention()
 
         self._prev_price = close.iloc[-1]
         self._emw_gain = emw_gains.iloc[-1]
         self._emw_loss = emw_losses.iloc[-1]
+
+        self.drop_data()
 
     def update(self, data: pd.Series):
         """
@@ -164,6 +165,12 @@ class RSI(Indicator):
             self._rsi[self._count] = self._rsi_latest
             self._count += 1
 
+            # if self._retention:
+            #     self._rsi = self.apply_retention(self._rsi)
+
+    def apply_retention(self):
+        self._rsi = self._rsi.tail(self._retention)
+
     def rsi(self):
         """
         Return the stored RSI values.
@@ -185,4 +192,5 @@ class RSI(Indicator):
         Returns:
             float: The latest RSI value.
         """
+
         return self._rsi_latest

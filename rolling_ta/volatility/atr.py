@@ -1,8 +1,11 @@
 from pandas import DataFrame
 from rolling_ta.indicator import Indicator
+from rolling_ta.volatility import TrueRange
 
 import pandas as pd
 import numpy as np
+
+from typing import Optional
 
 
 class AverageTrueRange(Indicator):
@@ -19,8 +22,8 @@ class AverageTrueRange(Indicator):
 
     Material
     --------
-        https://www.investopedia.com/terms/a/atr.asp
-        https://pypi.org/project/ta/
+    - https://www.investopedia.com/terms/a/atr.asp
+    - https://pypi.org/project/ta/
 
     Attributes
     ----------
@@ -28,10 +31,6 @@ class AverageTrueRange(Indicator):
         A pandas Series storing the calculated ATR values over the specified period.
     _atr_latest : float
         The most recent ATR value.
-    _tr : TrueRange
-        An instance of the TrueRange indicator used to calculate the True Range values.
-    _period : int
-        The number of periods used for the ATR calculation.
 
     Methods
     -------
@@ -56,33 +55,54 @@ class AverageTrueRange(Indicator):
         Returns the latest ATR value.
     """
 
+    _tr: TrueRange
+
     _atr: pd.Series
     _atr_latest = np.nan
 
     def __init__(
-        self, data: DataFrame, period: int = 14, memory: bool = True, init: bool = True
+        self,
+        data: DataFrame,
+        period: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+        true_range: Optional[TrueRange] = None,
     ) -> None:
-        super().__init__(data, period, memory, init)
+        """
+        Initialize the ATR indicator.
+
+        Args:
+            data (pd.DataFrame): The initial dataframe containing price data with 'high', 'low', 'close' columns.
+            period (int): Default=14 | The period over which to calculate the ATR.
+            memory (bool): Default=True | Whether to store ATR values in memory.
+            init (bool): Default=True | Whether to calculate the initial ATR values upon instantiation.
+        """
+        super().__init__(data, period, memory, retention, init)
+        self._tr = (
+            TrueRange(data, period, memory, init) if true_range is None else true_range
+        )
 
         if self._init:
             self.init()
 
     def init(self):
-        high = self._data["high"]
-        low = self._data["low"]
-        close = self._data["close"]
-        close_p = close.shift(1)
+        """Calculate the initial ATR values based on historical data."""
 
-        tr = pd.DataFrame(
-            data=[high - low, (high - close_p).abs(), (low - close_p).abs()]
-        ).max()
+        # Check if True Range was initialized on instantiation.
+        if not self._tr._init:
+            self._tr.init()
+
+        close = self._data["close"]
+
+        tr = self._tr.tr()
 
         atr = pd.Series(np.zeros(close.shape[0]))
-        atr.iat[self._period - 1] = tr[: self._period].mean()
+        atr.iat[self._period_config - 1] = tr[: self._period_config].mean()
 
-        self._n_1 = self._period - 1
-        for i in range(self._period, close.shape[0]):
-            atr.iat[i] = ((atr.iat[i - 1] * self._n_1) + tr[i]) / self._period
+        self._n_1 = self._period_config - 1
+        for i in range(self._period_config, close.shape[0]):
+            atr.iat[i] = ((atr.iat[i - 1] * self._n_1) + tr[i]) / self._period_config
 
         if self._memory:
             self._count = close.shape[0]
@@ -91,16 +111,22 @@ class AverageTrueRange(Indicator):
         self._close_p = close.iat[-1]
         self._atr_latest = self._atr.iat[-1]
 
+        self.drop_data()
+
     def update(self, data: pd.Series):
-        high = data["high"]
-        low = data["low"]
+        """
+        Update the ATR with new price data.
+
+        Args:
+            data (pd.Series): The latest data containing 'high', 'low', 'close' prices.
+        """
         close = data["close"]
 
-        tr = np.max(
-            [high - low, np.abs(high - self._close_p), np.abs(low - self._close_p)]
-        )
+        self._tr.update(data)
 
-        atr = ((self._atr_latest * self._n_1) + tr) / self._period
+        atr = (
+            (self._atr_latest * self._n_1) + self._tr._tr_latest
+        ) / self._period_config
 
         if self._memory:
             self._atr[self._count] = atr
@@ -108,10 +134,26 @@ class AverageTrueRange(Indicator):
 
         self._close_p = close
         self._atr_latest = atr
-        return super().update(data)
 
     def atr(self):
+        """
+        Return the stored ATR values.
+
+        Returns:
+            pd.Series: The ATR values calculated over the historical data if memory is enabled.
+
+        Raises:
+            MemoryError: if function called and memory = False
+        """
+        if not self._memory:
+            raise MemoryError("ATR._memory = False")
         return self._atr
 
     def atr_latest(self):
+        """
+        Return the most recent RSI value.
+
+        Returns:
+            float: The latest RSI value.
+        """
         return self._atr_latest

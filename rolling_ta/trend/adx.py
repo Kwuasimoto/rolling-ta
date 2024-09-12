@@ -1,8 +1,20 @@
 from pandas import DataFrame, Series
 from rolling_ta.indicator import Indicator
+from rolling_ta.volatility import TrueRange, AverageTrueRange
+from rolling_ta.trend import DirectionalMovementIndex
 
 import pandas as pd
 import numpy as np
+
+from typing import Optional
+
+
+def expMovingAverage(values, window):
+    weights = np.exp(np.linspace(-1.0, 0.0, window))
+    weights /= weights.sum()
+    a = np.convolve(values, weights, mode="full")[: len(values)]
+    a[:window] = a[window]
+    return a
 
 
 class ADX(Indicator):
@@ -16,8 +28,8 @@ class ADX(Indicator):
 
     Material
     --------
-        https://www.investopedia.com/terms/a/adx.asp
-        https://pypi.org/project/ta/
+    - https://www.investopedia.com/terms/a/adx.asp
+    - https://pypi.org/project/ta/
 
     Attributes
     ----------
@@ -77,26 +89,68 @@ class ADX(Indicator):
         Returns the most recent -DI value.
     """
 
+    _dmi: DirectionalMovementIndex
+
     _adx: pd.Series
     _adx_latest = np.nan
 
-    _plus_di: pd.Series
-    _plus_di_latest = np.nan
+    def __init__(
+        self,
+        data: DataFrame,
+        period: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+        tr: Optional[TrueRange] = None,
+        atr: Optional[AverageTrueRange] = None,
+        dmi: Optional[DirectionalMovementIndex] = None,
+    ) -> None:
+        super().__init__(data, period, memory, retention, init)
 
-    _neg_di: pd.Series
-    _neg_di_latest = np.nan
-
-    _true_range: pd.Series
-    _true_range_latest = np.nan
-
-    def __init__(self, data: DataFrame, period: int, memory: bool, init: bool) -> None:
-        super().__init__(data, period, memory, init)
+        self._dmi = (
+            DirectionalMovementIndex(data, period, memory, retention, init, tr, atr)
+            if dmi is None
+            else dmi
+        )
 
         if self._init:
             self.init()
 
     def init(self):
-        return super().init()
+        if not self._init:
+            self._dmi.init()
+
+        dmi = self._dmi.dmi()
+        adx = dmi.ewm(
+            span=self._period_config, min_periods=self._period_config, adjust=False
+        ).mean()
+
+        if self._memory:
+            self._adx = adx
+            self._count = adx.shape[0]
+
+            if self._retention:
+                self._adx = self.apply_retention(self._adx)
+        
+        self.drop_data()
 
     def update(self, data: Series):
         return super().update(data)
+
+    def adx(self):
+        return self._adx
+
+    def dmi(self):
+        return self._dmi.dmi()
+
+    def pdi(self):
+        return self._dmi.pdi()
+
+    def ndi(self):
+        return self._dmi.ndi()
+
+    def atr(self):
+        return self._dmi._atr.atr()
+
+    def tr(self):
+        return self._dmi._atr._tr.tr()

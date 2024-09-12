@@ -5,6 +5,8 @@ from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 from rolling_ta.trend import SMA
 
+from typing import Optional
+
 
 class BollingerBands(Indicator):
     """
@@ -88,7 +90,9 @@ class BollingerBands(Indicator):
         period: int = 20,
         weight: np.float16 = 2.0,
         memory: bool = True,
+        retention: int = 20000,
         init: bool = True,
+        sma: Optional[SMA] = None,
     ) -> None:
         """
         Initializes the Bollinger Bands indicator with the given data, period, weight, and options.
@@ -97,15 +101,16 @@ class BollingerBands(Indicator):
             data (pd.DataFrame): The initial dataframe to use. Must contain a "close" column.
             period (int): Default=20 | Window length for the SMA and standard deviation calculations.
             weight (np.float16): Default=2.0 | The weight of the upper and lower bands.
+            sma (SMA | None): Default=None | Pass in an optional SMA that was separately instantiated.
             memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
         """
-        super().__init__(data, period, memory, init)
+        super().__init__(data, period, memory, retention, init)
         logger.debug(
             f"BollingerBands init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
         )
 
-        self._sma = SMA(self._data, self._period, self._memory, False)
+        self._sma = SMA(data, period, memory, retention, init) if sma is None else sma
         self._weight = weight
 
         if init:
@@ -119,12 +124,17 @@ class BollingerBands(Indicator):
         closing prices. It also initializes internal attributes and stores the computed Bollinger Bands values
         if memory is enabled.
         """
-        self._sma.init()
+
+        # Check if SMA was initialized on instantiation
+        if not self._sma._init:
+            self._sma.init()
 
         close = self._data["close"]
         count = close.shape[0]
 
-        std = close.rolling(self._period, min_periods=self._period).std(ddof=0)
+        std = close.rolling(self._period_config, min_periods=self._period_config).std(
+            ddof=0
+        )
         sma = self._sma.sma()
 
         std_weighted = std * self._weight
@@ -145,9 +155,8 @@ class BollingerBands(Indicator):
             self._count = count
             self._uband = uband
             self._lband = lband
-        else:
-            self._data = None
-            self._sma._data = None
+
+        self.drop_data()
 
     def update(self, close: np.float64):
         """

@@ -67,6 +67,7 @@ class EMA(Indicator):
         period: int = 14,
         weight: np.float64 = 2.0,
         memory: bool = True,
+        retention: int = 20000,
         init: bool = True,
     ) -> None:
         """
@@ -76,10 +77,11 @@ class EMA(Indicator):
             data (pd.DataFrame): The initial dataframe to use. Must contain a "close" column.
             period (int): Default=14 | Window length for the EMA calculation.
             weight (np.float64, optional): Default=2.0 | The weight of the EMA's multiplier.
+            retention (int): Default=20000 | The maximum number of RSI values to store in memory
             memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
         """
-        super().__init__(data, period, memory, init)
+        super().__init__(data, period, memory, retention, init)
         logger.debug(
             f"EMA init: [data_len={len(data)}, period={period}, memory={memory}]"
         )
@@ -98,8 +100,8 @@ class EMA(Indicator):
         close = self._data["close"]
 
         ema = close.ewm(
-            span=self._period,
-            min_periods=self._period,
+            span=self._period_config,
+            min_periods=self._period_config,
             alpha=self._weight,
             adjust=False,
         ).mean()
@@ -110,7 +112,10 @@ class EMA(Indicator):
             self._count = close.shape[0]
             self._ema = ema
 
-        self._data = None
+            # if self._count > self._retention:
+            #     self.apply_retention()
+
+        self.drop_data()
 
     def update(self, close: np.float64):
         """
@@ -127,6 +132,12 @@ class EMA(Indicator):
         if self._memory:
             self._ema[self._count] = self._ema_latest
             self._count += 1
+
+            # if self._retention:
+            #     self.apply_retention()
+
+    def apply_retention(self):
+        self._ema = self.apply_retention()
 
     def ema(self):
         """

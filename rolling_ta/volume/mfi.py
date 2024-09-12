@@ -67,6 +67,7 @@ class MFI(Indicator):
         data: DataFrame,
         period: int = 14,
         memory: bool = True,
+        retention: int = 20000,
         init: bool = True,
     ) -> None:
         """
@@ -78,7 +79,7 @@ class MFI(Indicator):
             memory (bool): Default=True | Whether to store MFI values in memory.
             init (bool): Default=True | Whether to calculate the initial MFI values upon instantiation.
         """
-        super().__init__(data, period, memory, init)
+        super().__init__(data, period, memory, retention, init)
 
         if self._init:
             self.init()
@@ -110,12 +111,12 @@ class MFI(Indicator):
         raw_mf = typical_price * volume * up_down
 
         # Summarize 14 period windows for both negative and positive raw money flows for each respectively.
-        mfr_pos = raw_mf.rolling(self._period, min_periods=self._period).apply(
-            lambda x: np.sum(np.where(x > 0, x, 0))
-        )
-        mfr_neg = raw_mf.rolling(self._period, min_periods=self._period).apply(
-            lambda x: np.sum(np.where(x < 0, -x, 0))
-        )
+        mfr_pos = raw_mf.rolling(
+            self._period_config, min_periods=self._period_config
+        ).apply(lambda x: np.sum(np.where(x > 0, x, 0)))
+        mfr_neg = raw_mf.rolling(
+            self._period_config, min_periods=self._period_config
+        ).apply(lambda x: np.sum(np.where(x < 0, -x, 0)))
 
         # Calculate MFI.
         mfi = (100 * mfr_pos) / (mfr_pos + mfr_neg)
@@ -126,7 +127,7 @@ class MFI(Indicator):
             self._count = close.shape[0]
 
         # Save the money for for the last window summarization
-        self._raw_mf = deque(raw_mf[-self._period :], maxlen=self._period)
+        self._raw_mf = deque(raw_mf[-self._period_config :], maxlen=self._period_config)
         self._prev_typical = typical_price.iloc[-1]
 
         self._data = None
@@ -171,6 +172,8 @@ class MFI(Indicator):
         if self._memory:
             self._mfi[self._count] = self._mfi_latest
             self._count += 1
+
+        self.drop_data()
 
     def mfi(self):
         """
