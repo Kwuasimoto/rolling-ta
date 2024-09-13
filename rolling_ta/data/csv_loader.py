@@ -15,7 +15,7 @@ class CSVLoader(DataLoader):
     ):
         logger.debug(f"CSVLoader: Loading from resources/{file_name}")
         resources = pkg.files("resources")
-        df = pd.read_csv(resources / file_name, header=None)
+        df = pd.read_csv(resources / file_name)
         return pd.DataFrame(data=df.values, columns=columns)
 
     def read_file(self, path: str):

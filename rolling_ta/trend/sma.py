@@ -64,7 +64,7 @@ class SMA(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period: int = 12,
+        period_config: int = 12,
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,
@@ -78,9 +78,9 @@ class SMA(Indicator):
             memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
         """
-        super().__init__(data, period, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, init)
         logger.debug(
-            f"SMA init: [data_len={len(data)}, period={period}, memory={memory}, init={init}]"
+            f"SMA init: [data_len={len(data)}, period={period_config}, memory={memory}, init={init}]"
         )
 
         if init:

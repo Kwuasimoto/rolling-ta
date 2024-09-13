@@ -100,9 +100,8 @@ class EMA(Indicator):
         close = self._data["close"]
 
         ema = close.ewm(
-            span=self._period_config,
+            alpha=1 / self._period_config,
             min_periods=self._period_config,
-            alpha=self._weight,
             adjust=False,
         ).mean()
         self._ema_latest = ema.iloc[-1]
