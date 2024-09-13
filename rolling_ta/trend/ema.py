@@ -64,7 +64,7 @@ class EMA(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period: int = 14,
+        period_config: int = 14,
         weight: np.float64 = 2.0,
         memory: bool = True,
         retention: int = 20000,
@@ -81,12 +81,12 @@ class EMA(Indicator):
             memory (bool): Default=True | Memory flag, if false removes all information not required for updates.
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
         """
-        super().__init__(data, period, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, init)
         logger.debug(
-            f"EMA init: [data_len={len(data)}, period={period}, memory={memory}]"
+            f"EMA init: [data_len={len(data)}, period={period_config}, memory={memory}]"
         )
 
-        self._weight = weight / (period + 1)
+        self._weight = weight / (period_config + 1)
 
         if init:
             self.init()
