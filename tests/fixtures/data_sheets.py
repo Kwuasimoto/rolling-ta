@@ -32,3 +32,25 @@ def ema_df(xls_loader: XLSLoader):
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
+
+
+# Used in TrueRange tests.
+@pytest.fixture(name="atr_df")
+def atr_df(xls_loader: XLSLoader):
+    try:
+        return xls_loader.read_resource(
+            "cs-atr.xlsx",
+            columns=[
+                "date",
+                "high",
+                "low",
+                "close",
+                "h-l",
+                "|h-c_p|",
+                "|l-c_p|",
+                "tr",
+                "atr",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))

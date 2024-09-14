@@ -1,7 +1,7 @@
 from .log import log
 from .eval import evaluate
 from .loaders import csv_loader, xls_loader
-from .data_sheets import obv_df, sma_df, ema_df
+from .data_sheets import obv_df, sma_df, ema_df, atr_df
 
 __all__ = [
     "log",
@@ -11,4 +11,5 @@ __all__ = [
     "obv_df",
     "sma_df",
     "ema_df",
+    "atr_df",
 ]

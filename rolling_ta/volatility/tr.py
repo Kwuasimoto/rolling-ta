@@ -1,5 +1,7 @@
+from typing import Union
+from rolling_ta.extras.numba import _tr, _tr_update
 from rolling_ta.indicator import Indicator
-
+from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
@@ -12,12 +14,12 @@ class TrueRange(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period: int = 14,
+        period_config: int = 14,
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,
     ) -> None:
-        super().__init__(data, period, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, init)
 
         if self._init:
             self.init()
@@ -63,3 +65,47 @@ class TrueRange(Indicator):
 
     def tr_latest(self):
         return self._tr_latest
+
+
+class NumbaTrueRange(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 14,
+        memory: bool = True,
+        retention: Union[int, None] = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        if self._init:
+            self.init()
+
+    def init(self):
+        high = self._data["high"].to_numpy(np.float64)
+        low = self._data["low"].to_numpy(np.float64)
+        close = self._data["close"].to_numpy(np.float64)
+
+        tr = _tr(high, low, close)
+
+        if self._memory:
+            self._tr = tr
+
+        self._close_p = close[-1]
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        high = data["high"]
+        low = data["low"]
+        close = data["close"]
+
+        tr = _tr_update(high, low, self._close_p)
+
+        if self._memory:
+            self._tr = np.append(self._tr, tr)
+
+        self._close_p = close
+
+    def tr(self):
+        return self._tr

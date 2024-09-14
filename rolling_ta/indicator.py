@@ -1,6 +1,5 @@
 import pandas as pd
-import numpy as np
-from typing import Union, List, Dict
+from typing import Union, Dict
 
 
 class Indicator:

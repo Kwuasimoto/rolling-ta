@@ -52,30 +52,30 @@ xls_loader = XLSLoader()
 
 if __name__ == "__main__":
     data = xls_loader.read_resource(
-        "cs-obv.xlsx",
-        columns=["date", "close", "up-down", "volume", "pos-neg", "obv"],
+        "cs-ema.xlsx",
+        columns=["date", "close", "ema"],
     ).copy()
 
     data.info()
     logger.info(f"MAIN: [columns=\n{data.columns}\n]")
     logger.info(f"MAIN: [df_values=\n{data.values}\n]")
 
-    rolling = OBV(data)
-    rolling_series = rolling.obv()
+    rolling = EMA(data, period_config=10)
+    rolling_series = rolling.ema()
 
     for [i, series] in data.iterrows():
-        e = series["obv"]
+        e = series["ema"]
         r = rolling_series.iloc[i]
-        logger.info(f"OBV: [i={i}, e={e}, r={r}]")
+        logger.info(f"EMA: [i={i}, e={e}, r={r}]")
 
-    # for i, series in copy.iloc[80:].iterrows():
-    #     rolling.update(series)
+# for i, series in copy.iloc[80:].iterrows():
+#     rolling.update(series)
 
-    # for i, [e, r] in enumerate(zip(expected_series, rolling_series)):
-    #     if i < 80:
-    #         logger.info(f"MFI: [i={i}, e={e}, r={r}]")
-    #     else:
-    #         logger.info(f"MFI: [i={i}, e={e}, r_updated={r}]")
+# for i, [e, r] in enumerate(zip(expected_series, rolling_series)):
+#     if i < 80:
+#         logger.info(f"MFI: [i={i}, e={e}, r={r}]")
+#     else:
+#         logger.info(f"MFI: [i={i}, e={e}, r_updated={r}]")
 
 # -- Speed Tests --
 

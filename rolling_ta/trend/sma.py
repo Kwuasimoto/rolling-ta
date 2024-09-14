@@ -4,6 +4,7 @@ from collections import deque
 import numpy as np
 import pandas as pd
 
+from rolling_ta.extras.numba import _sma, _sma_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 
@@ -79,9 +80,9 @@ class SMA(Indicator):
             init (bool, optional): Default=True | Calculate the immediate indicator values upon instantiation.
         """
         super().__init__(data, period_config, memory, retention, init)
-        logger.debug(
-            f"SMA init: [data_len={len(data)}, period={period_config}, memory={memory}, init={init}]"
-        )
+        # logger.debug(
+        #     f"SMA init: [data_len={len(data)}, period={period_config}, memory={memory}, init={init}]"
+        # )
 
         if init:
             self.init()
@@ -95,18 +96,21 @@ class SMA(Indicator):
         """
         close = self._data["close"]
 
-        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
-        self._window_sum = np.sum(self._window)
+        sma = (
+            close.rolling(window=self._period_config, min_periods=self._period_config)
+            .mean()
+            .fillna(0)
+        )
 
-        sma = close.rolling(
-            window=self._period_config, min_periods=self._period_config
-        ).mean()
         self._sma_latest = sma.iloc[-1]
 
         # Use memory for sma.
         if self._memory:
             self._count = close.shape[0]
             self._sma = sma
+
+        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
+        self._window_sum = np.sum(self._window)
 
         # Remove dataframe to avoid memory consumption.
         self.drop_data()
@@ -154,4 +158,63 @@ class SMA(Indicator):
         Returns:
             float: The most recent SMA value.
         """
+        return self._sma_latest
+
+
+# Numba enhanced SMA (init: 5-10x faster, update 4-5x faster)
+class NumbaSMA(Indicator):
+    _sma: np.ndarray[np.float64]
+    _sma_latest = np.nan
+
+    _window: Deque[np.float64]
+    _window_sum = np.nan
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 12,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        if init:
+            self.init()
+
+    def init(self):
+        close = self._data["close"].to_numpy(dtype=np.float64)
+        sma, current_sum = _sma(close, self._period_config)
+
+        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
+        self._window_sum = current_sum
+
+        self._sma_latest = sma[-1]
+
+        if self._memory:
+            self._sma = sma
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        close = data["close"]
+        close_f = self._window[0]
+
+        sma_latest, current_sum = _sma_update(
+            self._window_sum, close, close_f, self._period_config
+        )
+
+        self._sma_latest = sma_latest
+        self._window_sum = current_sum
+
+        self._window.append(close)
+
+        if self._memory:
+            self._sma = np.append(self._sma, self._sma_latest)
+
+    def sma(self):
+        if not self._memory:
+            raise MemoryError("SMA._memory = False")
+        return pd.Series(self._sma)
+
+    def sma_latest(self):
         return self._sma_latest

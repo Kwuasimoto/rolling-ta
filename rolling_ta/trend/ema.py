@@ -1,9 +1,7 @@
-from collections import deque
-from typing import Deque
-
 import numpy as np
 import pandas as pd
 
+from rolling_ta.extras.numba import _ema, _ema_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 
@@ -86,6 +84,7 @@ class EMA(Indicator):
             f"EMA init: [data_len={len(data)}, period={period_config}, memory={memory}]"
         )
 
+        # EX: (2 / (10 + 1))
         self._weight = weight / (period_config + 1)
 
         if init:
@@ -98,42 +97,44 @@ class EMA(Indicator):
         This method computes the EMA using the provided data and initializes internal attributes. If memory is enabled, it also stores the computed EMA values.
         """
         close = self._data["close"]
+        ema = np.zeros_like(close, dtype=np.float64)
 
-        ema = close.ewm(
-            alpha=1 / self._period_config,
-            min_periods=self._period_config,
-            adjust=False,
-        ).mean()
-        self._ema_latest = ema.iloc[-1]
+        self._ema_latest = np.sum(close[: self._period_config]) / self._period_config
+
+        ema[self._period_config - 1] = self._ema_latest
+        ema[self._period_config :] = close[self._period_config :].apply(self._calc)
 
         # Use Memory
         if self._memory:
             self._count = close.shape[0]
-            self._ema = ema
+            self._ema = pd.Series(ema)
 
             # if self._count > self._retention:
             #     self.apply_retention()
 
         self.drop_data()
 
-    def update(self, close: np.float64):
+    def _calc(self, close: np.float64):
+        self._ema_latest = (
+            (close - self._ema_latest) * self._weight
+        ) + self._ema_latest
+        return self._ema_latest
+
+    def update(self, data: pd.Series):
         """
         Updates the EMA based on new incoming closing price data.
 
         Args:
             close (np.float64): The new closing price to update the EMA with.
         """
-        self._close = close
+        close = data["close"]
         self._ema_latest = (
-            (self._close - self._ema_latest) * self._weight
+            (close - self._ema_latest) * self._weight
         ) + self._ema_latest
 
         if self._memory:
             self._ema[self._count] = self._ema_latest
             self._count += 1
-
-            # if self._retention:
-            #     self.apply_retention()
 
     def apply_retention(self):
         self._ema = self.apply_retention()
@@ -160,3 +161,45 @@ class EMA(Indicator):
             float: The most recent EMA value.
         """
         return self._ema_latest
+
+
+class NumbaEMA(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 14,
+        weight: np.float64 = 2.0,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        self._weight = weight / (period_config + 1)
+        if self._init:
+            self.init()
+
+    def init(self):
+
+        close = self._data["close"].to_numpy(dtype=np.float64)
+        ema = _ema(close, self._weight, self._period_config)
+
+        self._ema_latest = ema[-1]
+
+        if self._memory:
+            self._ema = ema
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+
+        close = data["close"]
+        self._ema_latest = _ema_update(close, self._weight, self._ema_latest)
+
+        if self._memory:
+            self._ema = np.append(self._ema, self._ema_latest)
+
+    def ema(self):
+        if not self._memory:
+            raise MemoryError("NumbaEMA._memory = False")
+        return pd.Series(self._ema)
