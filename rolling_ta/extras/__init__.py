@@ -9,6 +9,10 @@ from .numba import (
     _tr_update,
     _atr,
     _atr_update,
+    _dm,
+    _dm_smoothing,
+    _dmi,
+    _dx,
 )
 
 __all__ = [
@@ -22,4 +26,8 @@ __all__ = [
     "_tr_update",
     "_atr",
     "_atr_update",
+    "_dm",
+    "_dm_smoothing",
+    "_dmi",
+    "_dx",
 ]

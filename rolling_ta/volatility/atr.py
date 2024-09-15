@@ -183,6 +183,7 @@ class NumbaAverageTrueRange(Indicator):
         atr = _atr(
             self._tr.tr().to_numpy(np.float64),
             self._period_config,
+            self._n_1,
         )
 
         if self._memory:

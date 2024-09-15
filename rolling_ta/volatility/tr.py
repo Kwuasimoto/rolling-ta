@@ -108,4 +108,4 @@ class NumbaTrueRange(Indicator):
         self._close_p = close
 
     def tr(self):
-        return self._tr
+        return pd.Series(self._tr)

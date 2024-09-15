@@ -58,5 +58,8 @@ class Indicator:
     def apply_retention(self):
         pass
 
+    def set_data(self, data: pd.DataFrame):
+        self._data = data
+
     def drop_data(self):
         self._data = None

@@ -1,12 +1,13 @@
 from pandas import DataFrame, Series
+from rolling_ta.extras.numba import _dx, _adx
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TrueRange, AverageTrueRange
-from rolling_ta.trend import DirectionalMovementIndex
-
+from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
+from rolling_ta.trend import DMI, NumbaDMI
+from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
-from typing import Optional
+from typing import Optional, Union
 
 
 def expMovingAverage(values, window):
@@ -15,6 +16,47 @@ def expMovingAverage(values, window):
     a = np.convolve(values, weights, mode="full")[: len(values)]
     a[:window] = a[window]
     return a
+
+
+# Has 100% correct implementation.
+class NumbaADX(Indicator):
+
+    def __init__(
+        self,
+        data: DataFrame,
+        period_config: int = 14,
+        memory: bool = True,
+        retention: Union[int, None] = None,
+        init: bool = True,
+        dmi: Optional[NumbaDMI] = None,
+        tr: Optional[NumbaTrueRange] = None,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        self._dmi = (
+            NumbaDMI(data, period_config, memory, retention, init, tr)
+            if dmi is None
+            else dmi
+        )
+        if self._init:
+            self.init()
+
+    def init(self):
+        if not self._init:
+            self._dmi.init()
+
+        pdmi = self._dmi.pdmi().to_numpy(np.float64)
+        ndmi = self._dmi.ndmi().to_numpy(np.float64)
+
+        self._dx = _dx(pdmi, ndmi, self._period_config)
+        self._adx = _adx(self._dx, self._period_config, self._dmi._period_config)
+
+        self.drop_data()
+
+    def update(self, data: Series):
+        raise NotImplementedError("ADX Update has yet to be implemented!")
+
+    def adx(self):
+        return self._adx
 
 
 class ADX(Indicator):
@@ -89,7 +131,7 @@ class ADX(Indicator):
         Returns the most recent -DI value.
     """
 
-    _dmi: DirectionalMovementIndex
+    _dmi: DMI
 
     _adx: pd.Series
     _adx_latest = np.nan
@@ -103,14 +145,12 @@ class ADX(Indicator):
         init: bool = True,
         tr: Optional[TrueRange] = None,
         atr: Optional[AverageTrueRange] = None,
-        dmi: Optional[DirectionalMovementIndex] = None,
+        dmi: Optional[DMI] = None,
     ) -> None:
         super().__init__(data, period, memory, retention, init)
 
         self._dmi = (
-            DirectionalMovementIndex(data, period, memory, retention, init, tr, atr)
-            if dmi is None
-            else dmi
+            DMI(data, period, memory, retention, init, tr, atr) if dmi is None else dmi
         )
 
         if self._init:
@@ -131,7 +171,7 @@ class ADX(Indicator):
 
             if self._retention:
                 self._adx = self.apply_retention(self._adx)
-        
+
         self.drop_data()
 
     def update(self, data: Series):

@@ -1,15 +1,63 @@
 from typing import Optional
+from rolling_ta.extras.numba import _dm, _dm_smoothing, _dmi, _dx
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TrueRange, AverageTrueRange
+from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
 import pandas as pd
 import numpy as np
 
-from time import time
 
-from rolling_ta.logging import logger
+class NumbaDMI(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+        tr: Optional[NumbaTrueRange] = None,
+    ) -> None:
+        super().__init__(data, period, memory, retention, init)
+        self._n_1 = period - 1
+        self._tr = (
+            NumbaTrueRange(data, period, memory, retention, init) if tr is None else tr
+        )
+        if self._init:
+            self.init()
+
+    def init(self):
+        if not self._init:
+            self._tr.init()
+
+        high = self._data["high"].to_numpy(np.float64)
+        low = self._data["low"].to_numpy(np.float64)
+        tr = self._tr.tr().to_numpy(np.float64)
+
+        pdm, ndm = _dm(high, low)
+        self._pdm = pdm
+        self._ndm = ndm
+
+        # ADX Does not use the initial TR value (high-low). Only valid True Range calculations.
+        self._s_tr = _dm_smoothing(tr)
+        self._s_pdm = _dm_smoothing(pdm)
+        self._s_ndm = _dm_smoothing(ndm)
+
+        self._pdmi = _dmi(self._s_pdm, self._s_tr)
+        self._ndmi = _dmi(self._s_ndm, self._s_tr)
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        return super().update(data)
+
+    def pdmi(self):
+        return pd.Series(self._pdmi)
+
+    def ndmi(self):
+        return pd.Series(self._ndmi)
 
 
-class DirectionalMovementIndex(Indicator):
+class DMI(Indicator):
 
     _pdi: pd.Series
     _ndi: pd.Series

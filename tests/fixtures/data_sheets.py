@@ -1,6 +1,14 @@
 import pytest
 
-from rolling_ta.data import XLSLoader
+from rolling_ta.data import XLSLoader, CSVLoader
+
+
+@pytest.fixture(name="btc_df")
+def btc_df(csv_loader: CSVLoader):
+    try:
+        return csv_loader.read_resource().copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
 
 
 @pytest.fixture(name="obv_df")
@@ -50,6 +58,32 @@ def atr_df(xls_loader: XLSLoader):
                 "|l-c_p|",
                 "tr",
                 "atr",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="adx_df")
+def adx_df(xls_loader: XLSLoader):
+    try:
+        return xls_loader.read_resource(
+            "cs-adx.xlsx",
+            columns=[
+                "date",
+                "high",
+                "low",
+                "close",
+                "tr",
+                "+dm",
+                "-dm",
+                "tr14",
+                "+dm14",
+                "-dm14",
+                "+di14",
+                "-di14",
+                "dx",
+                "adx",
             ],
         ).copy()
     except FileNotFoundError as fnfe:
