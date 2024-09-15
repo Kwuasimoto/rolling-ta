@@ -174,17 +174,17 @@ def _dm(
 
 @nb.njit
 def _dm_smoothing(
-    data: np.ndarray[f8],
+    dm: np.ndarray[f8],
     period: i4 = 14,
 ) -> np.ndarray[f8]:
     # According to: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
     # The initial TrueRange value (ex: high - low) is not a valid True Range, so we start at period + 1
     p_1 = period + 1
-    s = np.zeros(data.shape, dtype=np.float64)
-    s[p_1 - 1] = np.sum(data[1:p_1])
-    for i in range(p_1, data.size):
+    s = np.zeros(dm.shape, dtype=np.float64)
+    s[p_1 - 1] = np.sum(dm[1:p_1])
+    for i in range(p_1, dm.size):
         s_p = s[i - 1]
-        s[i] = s_p - (s_p / period) + data[i]
+        s[i] = s_p - (s_p / period) + dm[i]
     return s
 
 
