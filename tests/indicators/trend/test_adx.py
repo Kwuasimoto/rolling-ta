@@ -11,7 +11,7 @@ from tests.fixtures.eval import Eval
 
 
 def test_numba_adx(btc_df: pd.DataFrame, evaluate: Eval):
-    data = btc_df.iloc[:50].copy()
+    data = btc_df.iloc[:200].copy()
 
     expected = ADXIndicator(data["high"], data["low"], data["close"])
     rolling = NumbaADX(data)
@@ -20,4 +20,13 @@ def test_numba_adx(btc_df: pd.DataFrame, evaluate: Eval):
 
 
 def test_numba_adx_update(btc_df: pd.DataFrame, evaluate: Eval):
-    pass
+    data = btc_df.iloc[:200].copy()
+
+    expected = ADXIndicator(data["high"], data["low"], data["close"])
+    rolling = NumbaADX(data.iloc[:50])
+
+    for _, series in data.iloc[50:].iterrows():
+        rolling.update(series)
+
+    rolling_ema = rolling
+    evaluate(expected.adx().round(4), rolling_ema.adx().round(4))

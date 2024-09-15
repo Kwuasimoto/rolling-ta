@@ -92,6 +92,7 @@ class NumbaTrueRange(Indicator):
             self._tr = tr
 
         self._close_p = close[-1]
+        self._tr_latest = tr[-1]
 
         self.drop_data()
 
@@ -106,6 +107,10 @@ class NumbaTrueRange(Indicator):
             self._tr = np.append(self._tr, tr)
 
         self._close_p = close
+        self._tr_latest = tr
 
     def tr(self):
         return pd.Series(self._tr)
+
+    def tr_latest(self):
+        return self._tr_latest

@@ -145,17 +145,17 @@ def _atr_update(
 def _dm(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
-) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
+) -> tuple[np.ndarray[f8], np.ndarray[f8], f8, f8]:
     high_p = np.empty(high.shape, dtype=np.float64)
-    high_p[0] = 0.0
     high_p[1:] = high[:-1]
 
     low_p = np.empty(low.shape, dtype=np.float64)
-    low_p[0] = 0.0
     low_p[1:] = low[:-1]
 
     high[0] = 0.0
     low[0] = 0.0
+    high_p[0] = 0.0
+    low_p[0] = 0.0
 
     move_up = high - high_p
     move_down = low_p - low
@@ -169,6 +169,25 @@ def _dm(
     pdm[move_up_mask] = move_up[move_up_mask]
     ndm[move_down_mask] = move_down[move_down_mask]
 
+    return pdm, ndm, pdm[-1], ndm[-1]
+
+
+@nb.njit
+def _dm_update(
+    high: f8,
+    low: f8,
+    high_p: f8,
+    low_p: f8,
+) -> tuple[f8, f8]:
+    move_up = high - high_p
+    move_down = low_p - low
+
+    move_up_bool = (move_up > 0) & (move_up > move_down)
+    move_down_bool = (move_down > 0) & (move_down > move_up)
+
+    pdm = move_up if move_up_bool else 0.0
+    ndm = move_down if move_down_bool else 0.0
+
     return pdm, ndm
 
 
@@ -176,7 +195,7 @@ def _dm(
 def _dm_smoothing(
     dm: np.ndarray[f8],
     period: i4 = 14,
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8]:
     # According to: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
     # The initial TrueRange value (ex: high - low) is not a valid True Range, so we start at period + 1
     p_1 = period + 1
@@ -185,7 +204,16 @@ def _dm_smoothing(
     for i in range(p_1, dm.size):
         s_p = s[i - 1]
         s[i] = s_p - (s_p / period) + dm[i]
-    return s
+    return s, s[-1]
+
+
+@nb.njit
+def _dm_smoothing_update(
+    dm: f8,
+    dm_p: f8,
+    period: i4 = 14,
+) -> f8:
+    return dm_p - (dm_p / period) + dm
 
 
 @nb.njit
@@ -193,19 +221,42 @@ def _dmi(
     dm: np.ndarray[f8],
     tr: np.ndarray[f8],
     period: i4 = 14,
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8]:
     dmi = np.zeros(dm.shape, dtype=np.float64)
     dmi[period:] = (dm[period:] / tr[period:]) * 100
-    return dmi
+    return dmi, dmi[-1]
 
 
 @nb.njit
-def _dx(pdmi: np.ndarray[f8], ndmi: np.ndarray[f8], period: i4 = 14) -> np.ndarray[f8]:
+def _dmi_update(
+    dm: f8,
+    tr: f8,
+) -> f8:
+    return (dm / tr) * 100
+
+
+@nb.njit
+def _dx(
+    pdmi: np.ndarray[f8],
+    ndmi: np.ndarray[f8],
+    period: i4 = 14,
+) -> tuple[np.ndarray[f8], f8]:
     dx = np.zeros(pdmi.shape, dtype=np.float64)
     dx[period:] = (
         np.abs(pdmi[period:] - ndmi[period:]) / (pdmi[period:] + ndmi[period:])
     ) * 100
-    return dx
+    return dx, dx[-1]
+
+
+@nb.njit
+def _dx_update(
+    pdmi: f8,
+    ndmi: f8,
+) -> f8:
+    delta = pdmi - ndmi
+    if delta == 0:
+        return 0
+    return (np.abs(delta) / (pdmi + ndmi)) * 100
 
 
 @nb.njit
@@ -213,11 +264,20 @@ def _adx(
     dx: np.ndarray[f8],
     adx_period: i4 = 14,
     dmi_period: i4 = 14,
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8]:
     pp = adx_period + dmi_period
     weight = adx_period - 1
     adx = np.zeros(dx.shape, dtype=np.float64)
     adx[pp - 1] = np.mean(dx[adx_period:pp])
     for i in range(pp, adx.size):
         adx[i] = ((adx[i - 1] * weight) + dx[i]) / adx_period
-    return adx
+    return adx, adx[-1]
+
+
+@nb.njit
+def _adx_update(
+    dx: f8,
+    adx_p: f8,
+    adx_period: i4 = 14,
+) -> f8:
+    return ((adx_p * (adx_period - 1)) + dx) / adx_period

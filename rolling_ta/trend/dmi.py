@@ -1,7 +1,15 @@
 from typing import Optional
-from rolling_ta.extras.numba import _dm, _dm_smoothing, _dmi, _dx
+from rolling_ta.extras.numba import (
+    _dm,
+    _dm_update,
+    _dm_smoothing,
+    _dm_smoothing_update,
+    _dmi,
+    _dmi_update,
+)
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
+from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
@@ -33,22 +41,60 @@ class NumbaDMI(Indicator):
         low = self._data["low"].to_numpy(np.float64)
         tr = self._tr.tr().to_numpy(np.float64)
 
-        pdm, ndm = _dm(high, low)
-        self._pdm = pdm
-        self._ndm = ndm
+        pdm, ndm, pdm_p, ndm_p = _dm(high, low)
+
+        s_tr, s_tr_p = _dm_smoothing(tr)
+        s_pdm, s_pdm_p = _dm_smoothing(pdm)
+        s_ndm, s_ndm_p = _dm_smoothing(ndm)
+
+        pdmi, pdmi_p = _dmi(s_pdm, s_tr)
+        ndmi, ndmi_p = _dmi(s_ndm, s_tr)
 
         # ADX Does not use the initial TR value (high-low). Only valid True Range calculations.
-        self._s_tr = _dm_smoothing(tr)
-        self._s_pdm = _dm_smoothing(pdm)
-        self._s_ndm = _dm_smoothing(ndm)
+        if self._memory:
+            self._pdmi = pdmi
+            self._ndmi = ndmi
 
-        self._pdmi = _dmi(self._s_pdm, self._s_tr)
-        self._ndmi = _dmi(self._s_ndm, self._s_tr)
+        self._high_p = high[-1]
+        self._low_p = low[-1]
+
+        self._pdm_p = pdm_p
+        self._ndm_p = ndm_p
+
+        self._s_tr_p = s_tr_p
+        self._s_pdm_p = s_pdm_p
+        self._s_ndm_p = s_ndm_p
+
+        self._pdmi_p = pdmi_p
+        self._ndmi_p = ndmi_p
 
         self.drop_data()
 
     def update(self, data: pd.Series):
-        return super().update(data)
+        high = data["high"]
+        low = data["low"]
+
+        tr_p = self._tr._tr_latest
+        self._tr.update(data)
+
+        pdm, ndm = _dm_update(high, low, self._high_p, self._low_p)
+
+        s_tr = _dm_smoothing_update(self._tr._tr_latest, tr_p, self._period_config)
+        s_pdm = _dm_smoothing_update(pdm, self._pdm_p, self._period_config)
+        s_ndm = _dm_smoothing_update(ndm, self._ndm_p, self._period_config)
+
+        self._pdmi_p = _dmi_update(s_pdm, s_tr)
+        self._ndmi_p = _dmi_update(s_ndm, s_tr)
+
+        self._pdm_p = pdm
+        self._ndm_p = ndm
+
+        self._s_tr_p = s_tr
+        self._s_pdm_p = s_pdm
+        self._s_ndm_p = s_ndm
+
+        self._high_p = high
+        self._low_p = low
 
     def pdmi(self):
         return pd.Series(self._pdmi)
@@ -56,7 +102,14 @@ class NumbaDMI(Indicator):
     def ndmi(self):
         return pd.Series(self._ndmi)
 
+    def pdmi_latest(self):
+        return self._pdmi_p
 
+    def ndmi_latest(self):
+        return self._ndmi_p
+
+
+# Incorrect implementation, use Numba version.
 class DMI(Indicator):
 
     _pdi: pd.Series
@@ -136,13 +189,12 @@ class DMI(Indicator):
             self._dmi = dmi
             self._count = dmi.shape[0]
 
-            # if self._retention:
-            #     self.apply_retention()
-
         self.drop_data()
 
     def update(self, data: pd.Series):
-        return super().update(data)
+        raise NotImplementedError(
+            "DMI Update not implemented. Please create a PR to help :D"
+        )
 
     def pdi(self):
         return self._pdi

@@ -1,5 +1,5 @@
 from pandas import DataFrame, Series
-from rolling_ta.extras.numba import _dx, _adx
+from rolling_ta.extras.numba import _dx, _adx, _dx_update, _adx_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
 from rolling_ta.trend import DMI, NumbaDMI
@@ -47,16 +47,34 @@ class NumbaADX(Indicator):
         pdmi = self._dmi.pdmi().to_numpy(np.float64)
         ndmi = self._dmi.ndmi().to_numpy(np.float64)
 
-        self._dx = _dx(pdmi, ndmi, self._period_config)
-        self._adx = _adx(self._dx, self._period_config, self._dmi._period_config)
+        dx, dx_p = _dx(pdmi, ndmi, self._period_config)
+        adx, adx_p = _adx(dx, self._period_config, self._dmi._period_config)
+
+        if self._memory:
+            self._adx = adx
+
+        self._dx_p = dx_p
+        self._adx_p = adx_p
 
         self.drop_data()
 
     def update(self, data: Series):
-        raise NotImplementedError("ADX Update has yet to be implemented!")
+        self._dmi.update(data)
+
+        self._dx_p = _dx_update(
+            self._dmi.pdmi_latest(),
+            self._dmi.ndmi_latest(),
+        )
+        self._adx_p = _adx_update(self._dx_p, self._adx_p, self._period_config)
 
     def adx(self):
         return self._adx
+
+    def adx_latest(self):
+        return self._adx_p
+
+    def dx_latest(self):
+        return self._dx_p
 
 
 class ADX(Indicator):
