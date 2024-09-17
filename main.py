@@ -1,29 +1,42 @@
 import numpy as np
 
 from rolling_ta.extras.numba import _mfi
-from rolling_ta.data import CSVLoader
+from rolling_ta.data import CSVLoader, XLSLoader
 from rolling_ta.logging import logger
 from ta.volume import MFIIndicator
 
+from rolling_ta.trend.dmi import NumbaDMI
+
 
 if __name__ == "__main__":
-    for i in range(0):
-        print("Shouldn't run")
-    # loader = CSVLoader()
-    # data = loader.read_resource().copy().iloc[:20]
+    loader = XLSLoader()
+    adx_df = loader.read_resource(
+        "cs-adx.xlsx",
+        columns=[
+            "date",
+            "high",
+            "low",
+            "close",
+            "tr",
+            "+dm",
+            "-dm",
+            "tr14",
+            "+dm14",
+            "-dm14",
+            "+di14",
+            "-di14",
+            "dx",
+            "adx",
+        ],
+    )
 
-    # high = data["high"]
-    # low = data["low"]
-    # close = data["close"]
-    # volume = data["volume"]
+    dmi = NumbaDMI(adx_df.iloc[:21])
 
-    # result, _, __, ___ = _mfi(
-    #     high.to_numpy(np.float64),
-    #     low.to_numpy(np.float64),
-    #     close.to_numpy(np.float64),
-    #     volume.to_numpy(np.float64),
-    # )
-    # expected = MFIIndicator(high, low, close, volume).money_flow_index()
+    for i, series in adx_df.iloc[21:].iterrows():
+        dmi.update(series)
 
-    # logger.info(f"MFI [\n{result}\n]")
-    # logger.info(f"MFI [\n{expected}\n]")
+    expected_pdmi = adx_df["+di14"].to_numpy(np.float64).round(3)
+    rolling_pdmi = dmi.pdmi().round(3)
+
+    logger.info(expected_pdmi)
+    logger.info(rolling_pdmi)

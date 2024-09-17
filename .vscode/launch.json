@@ -5,6 +5,18 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Debug Tests",
+      "type": "python",
+      "request": "launch",
+      "purpose": ["debug-test"],
+      "console": "integratedTerminal",
+      "program": "${file}",
+      "justMyCode": true,
+      "env": {
+        "_PYTEST_RAISE": "1"
+      }
+    },
+    {
       "name": "main.py",
       "type": "debugpy",
       "request": "launch",

@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 from rolling_ta.trend import NumbaADX
@@ -23,10 +24,13 @@ def test_numba_adx_update(btc_df: pd.DataFrame, evaluate: Eval):
     data = btc_df.iloc[:200].copy()
 
     expected = ADXIndicator(data["high"], data["low"], data["close"])
-    rolling = NumbaADX(data.iloc[:50])
+    rolling = NumbaADX(data.iloc[:100])
 
-    for _, series in data.iloc[50:].iterrows():
+    for _, series in data.iloc[100:].iterrows():
         rolling.update(series)
 
     rolling_ema = rolling
-    evaluate(expected.adx().round(4), rolling_ema.adx().round(4))
+    evaluate(
+        expected.adx().to_numpy(np.float64).round(4),
+        rolling_ema.adx().to_numpy(np.float64).round(4),
+    )

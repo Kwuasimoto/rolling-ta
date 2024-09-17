@@ -71,23 +71,18 @@ def _sliding_midpoint(
     high: np.ndarray[f8], low: np.ndarray[f8], period: i4
 ) -> np.ndarray:
     n: i8 = high.size
-    arr: np.ndarray[f8] = _empty(
-        n, period, dtype=np.float64
-    )  # Create an array to store the Tenkan-sen values
+    arr: np.ndarray[f8] = _empty(n, period, dtype=np.float64)
 
-    # Parallel loop to calculate the Tenkan-sen for each index starting from period - 1
     for i in nb.prange(period - 1, n):
         max_val: f8 = 0.0
         min_val: f8 = np.inf
 
-        # Compute max and min over the last `period` elements for each i
         for j in range(i - period + 1, i + 1):
             if high[j] > max_val:
                 max_val = high[j]
             if low[j] < min_val:
                 min_val = low[j]
 
-        # Calculate the Tenkan-sen value for this index
         arr[i] = (max_val + min_val) * 0.5
 
     return arr
@@ -320,15 +315,16 @@ def _dm(
     move_up_mask = (move_up > 0) & (move_up > move_down)
     move_down_mask = (move_down > 0) & (move_down > move_up)
 
-    pdm = np.zeros(move_up_mask.shape, dtype=np.float64)
-    ndm = np.zeros(move_down_mask.shape, dtype=np.float64)
+    pdm = np.zeros(move_up_mask.size, dtype=np.float64)
+    ndm = np.zeros(move_down_mask.size, dtype=np.float64)
 
     pdm[move_up_mask] = move_up[move_up_mask]
     ndm[move_down_mask] = move_down[move_down_mask]
 
-    return pdm, ndm, pdm[-1], ndm[-1]
+    return pdm, ndm, high[-1], low[-1]
 
 
+# OK
 @nb.njit
 def _dm_update(
     high: f8,
@@ -339,38 +335,44 @@ def _dm_update(
     move_up = high - high_p
     move_down = low_p - low
 
-    move_up_bool = (move_up > 0) & (move_up > move_down)
-    move_down_bool = (move_down > 0) & (move_down > move_up)
+    move_up_mask = (move_up > 0) & (move_up > move_down)
+    move_down_mask = (move_down > 0) & (move_down > move_up)
 
-    pdm = move_up if move_up_bool else 0.0
-    ndm = move_down if move_down_bool else 0.0
+    pdm = move_up if move_up_mask else 0.0
+    ndm = move_down if move_down_mask else 0.0
 
     return pdm, ndm
 
 
-@nb.njit
+@nb.njit(parallel=True)
 def _dm_smoothing(
-    dm: np.ndarray[f8],
+    x: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f8], f8]:
     # According to: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
     # The initial TrueRange value (ex: high - low) is not a valid True Range, so we start at period + 1
     p_1 = period + 1
-    s = _empty(dm.size, period, dtype=np.float64)
-    s[p_1 - 1] = sum(dm[1:p_1])
-    for i in range(p_1, dm.size):
+    s = _empty(x.size, period, dtype=np.float64)
+    x_sum: i8 = 0
+
+    for i in nb.prange(1, p_1):
+        x_sum += x[i]
+    s[period] = x_sum
+
+    for i in range(p_1, x.size):
         s_p = s[i - 1]
-        s[i] = s_p - (s_p / period) + dm[i]
+        s[i] = s_p - (s_p / period) + x[i]
+
     return s, s[-1]
 
 
 @nb.njit
 def _dm_smoothing_update(
-    dm: f8,
-    dm_p: f8,
+    x: f8,
+    s_p: f8,
     period: i4 = 14,
 ) -> f8:
-    return dm_p - (dm_p / period) + dm
+    return s_p - (s_p / period) + x
 
 
 @nb.njit(parallel=True)
@@ -378,14 +380,14 @@ def _dmi(
     dm: np.ndarray[f8],
     tr: np.ndarray[f8],
     period: i4 = 14,
-) -> tuple[np.ndarray[f8], f8]:
+) -> np.ndarray[f8]:
     n = dm.size
     dmi = _empty(dm.size, period, dtype=np.float64)
 
     for i in nb.prange(period, n):
         dmi[i] = (dm[i] / tr[i]) * 100
 
-    return dmi, dmi[-1]
+    return dmi
 
 
 @nb.njit
@@ -396,7 +398,7 @@ def _dmi_update(
     return (dm / tr) * 100
 
 
-@nb.njit
+@nb.njit(parallel=True)
 def _dx(
     pdmi: np.ndarray[f8],
     ndmi: np.ndarray[f8],
@@ -405,7 +407,7 @@ def _dx(
     n = pdmi.size
     dx = _empty(n, period, dtype=np.float64)
 
-    for i in range(period, n):
+    for i in nb.prange(period, n):
         dx[i] = (abs(pdmi[i] - ndmi[i]) / (pdmi[i] + ndmi[i])) * 100
 
     return dx, dx[-1]
@@ -419,7 +421,7 @@ def _dx_update(
     delta = pdmi - ndmi
     if delta == 0:
         return 0
-    return (abs(delta) / (pdmi + ndmi)) * 100
+    return (abs(pdmi - ndmi) / (pdmi + ndmi)) * 100
 
 
 @nb.njit(parallel=True)

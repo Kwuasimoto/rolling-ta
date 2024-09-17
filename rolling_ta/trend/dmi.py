@@ -40,59 +40,50 @@ class NumbaDMI(Indicator):
         low = self._data["low"].to_numpy(np.float64)
         tr = self._tr.tr().to_numpy(np.float64)
 
-        pdm, ndm, pdm_p, ndm_p = _dm(high, low)
+        # pdm, ndm, pdm[-1], ndm[-1], high[-1], low[-1]
+        pdm, ndm, high_p, low_p = _dm(high, low)
 
-        s_tr, s_tr_p = _dm_smoothing(tr)
-        s_pdm, s_pdm_p = _dm_smoothing(pdm)
-        s_ndm, s_ndm_p = _dm_smoothing(ndm)
+        s_tr, s_tr_p = _dm_smoothing(tr, self._period_config)
+        s_pdm, s_pdm_p = _dm_smoothing(pdm, self._period_config)
+        s_ndm, s_ndm_p = _dm_smoothing(ndm, self._period_config)
 
-        pdmi, pdmi_p = _dmi(s_pdm, s_tr, self._period_config)
-        ndmi, ndmi_p = _dmi(s_ndm, s_tr, self._period_config)
+        pdmi = _dmi(s_pdm, s_tr, self._period_config)
+        ndmi = _dmi(s_ndm, s_tr, self._period_config)
 
-        if self._memory:
-            self._pdmi = pdmi
-            self._ndmi = ndmi
-
-        self._high_p = high[-1]
-        self._low_p = low[-1]
-
-        self._pdm_p = pdm_p
-        self._ndm_p = ndm_p
+        self._high_p = high_p
+        self._low_p = low_p
 
         self._s_tr_p = s_tr_p
         self._s_pdm_p = s_pdm_p
         self._s_ndm_p = s_ndm_p
 
-        self._pdmi_p = pdmi_p
-        self._ndmi_p = ndmi_p
-
+        if self._memory:
+            self._pdmi = list(pdmi)
+            self._ndmi = list(ndmi)
         self.drop_data()
 
     def update(self, data: pd.Series):
         high = data["high"]
         low = data["low"]
 
-        tr_p = self._tr._tr_latest
-        self._tr.update(data)
+        # Update sub indicators and get necessary values
+        tr = self._tr.update(data)
 
         pdm, ndm = _dm_update(high, low, self._high_p, self._low_p)
 
-        s_tr = _dm_smoothing_update(self._tr._tr_latest, tr_p, self._period_config)
-        s_pdm = _dm_smoothing_update(pdm, self._pdm_p, self._period_config)
-        s_ndm = _dm_smoothing_update(ndm, self._ndm_p, self._period_config)
+        self._s_tr_p = _dm_smoothing_update(tr, self._s_tr_p, self._period_config)
+        self._s_pdm_p = _dm_smoothing_update(pdm, self._s_pdm_p, self._period_config)
+        self._s_ndm_p = _dm_smoothing_update(ndm, self._s_ndm_p, self._period_config)
 
-        self._pdmi_p = _dmi_update(s_pdm, s_tr)
-        self._ndmi_p = _dmi_update(s_ndm, s_tr)
-
-        self._pdm_p = pdm
-        self._ndm_p = ndm
-
-        self._s_tr_p = s_tr
-        self._s_pdm_p = s_pdm
-        self._s_ndm_p = s_ndm
+        self._pdmi_p = _dmi_update(self._s_pdm_p, self._s_tr_p)
+        self._ndmi_p = _dmi_update(self._s_ndm_p, self._s_tr_p)
 
         self._high_p = high
         self._low_p = low
+
+        if self._memory:
+            self._pdmi.append(self._pdmi_p)
+            self._ndmi.append(self._ndmi_p)
 
     def pdmi(self):
         return pd.Series(self._pdmi)

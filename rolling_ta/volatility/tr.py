@@ -96,7 +96,7 @@ class NumbaTrueRange(Indicator):
 
         self.drop_data()
 
-    def update(self, data: pd.Series):
+    def update(self, data: pd.Series) -> np.float64:
         high = data["high"]
         low = data["low"]
         close = data["close"]
@@ -108,6 +108,8 @@ class NumbaTrueRange(Indicator):
 
         self._close_p = close
         self._tr_latest = tr
+
+        return tr
 
     def tr(self):
         return pd.Series(self._tr)
