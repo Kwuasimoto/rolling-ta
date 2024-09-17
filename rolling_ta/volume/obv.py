@@ -92,7 +92,7 @@ class NumbaOBV(Indicator):
         # logger.info(f"NumbaOBV: [obv={obv[:]}]")
 
         if self._memory:
-            self._obv = obv
+            self._obv = list(obv)
 
         self._obv_latest = obv[-1]
         self._close_p = close[-1]
@@ -106,9 +106,9 @@ class NumbaOBV(Indicator):
         self._obv_latest = _obv_update(close, volume, self._close_p, self._obv_latest)
 
         if self._memory:
-            self._obv = np.append(self._obv, self._obv_latest)
+            self._obv.append(self._obv_latest)
 
         self._close_p = close
 
     def obv(self):
-        return self._obv
+        return pd.Series(self._obv)

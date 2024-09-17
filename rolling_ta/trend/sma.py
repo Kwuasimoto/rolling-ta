@@ -4,9 +4,69 @@ from collections import deque
 import numpy as np
 import pandas as pd
 
+import numba as nb
+
 from rolling_ta.extras.numba import _sma, _sma_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
+
+
+class NumbaSMA(Indicator):
+    _sma: np.ndarray[np.float64]
+    _sma_latest = np.nan
+
+    _window: Deque[np.float64]
+    _window_sum = np.nan
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 12,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        if init:
+            self.init()
+
+    def init(self):
+        close = self._data["close"].to_numpy(dtype=np.float64)
+        sma, current_sum = _sma(close, self._period_config)
+
+        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
+        self._window_sum = current_sum
+
+        self._sma_latest = sma[-1]
+
+        if self._memory:
+            self._sma = sma
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        close = data["close"]
+        close_f = self._window[0]
+
+        sma_latest, current_sum = _sma_update(
+            self._window_sum, close, close_f, self._period_config
+        )
+
+        self._sma_latest = sma_latest
+        self._window_sum = current_sum
+
+        self._window.append(close)
+
+        if self._memory:
+            self._sma = np.append(self._sma, self._sma_latest)
+
+    def sma(self):
+        if not self._memory:
+            raise MemoryError("SMA._memory = False")
+        return pd.Series(self._sma)
+
+    def sma_latest(self):
+        return self._sma_latest
 
 
 class SMA(Indicator):
@@ -158,63 +218,4 @@ class SMA(Indicator):
         Returns:
             float: The most recent SMA value.
         """
-        return self._sma_latest
-
-
-# Numba enhanced SMA (init: 5-10x faster, update 4-5x faster)
-class NumbaSMA(Indicator):
-    _sma: np.ndarray[np.float64]
-    _sma_latest = np.nan
-
-    _window: Deque[np.float64]
-    _window_sum = np.nan
-
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        period_config: int = 12,
-        memory: bool = True,
-        retention: int = 20000,
-        init: bool = True,
-    ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
-        if init:
-            self.init()
-
-    def init(self):
-        close = self._data["close"].to_numpy(dtype=np.float64)
-        sma, current_sum = _sma(close, self._period_config)
-
-        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
-        self._window_sum = current_sum
-
-        self._sma_latest = sma[-1]
-
-        if self._memory:
-            self._sma = sma
-
-        self.drop_data()
-
-    def update(self, data: pd.Series):
-        close = data["close"]
-        close_f = self._window[0]
-
-        sma_latest, current_sum = _sma_update(
-            self._window_sum, close, close_f, self._period_config
-        )
-
-        self._sma_latest = sma_latest
-        self._window_sum = current_sum
-
-        self._window.append(close)
-
-        if self._memory:
-            self._sma = np.append(self._sma, self._sma_latest)
-
-    def sma(self):
-        if not self._memory:
-            raise MemoryError("SMA._memory = False")
-        return pd.Series(self._sma)
-
-    def sma_latest(self):
         return self._sma_latest

@@ -5,24 +5,24 @@ import numpy as np
 from numba.types import f8, f4, i4, i2, i8, b1
 
 ## // HELPER FUNCTIONS \\
-## Always use them within another njit function.
 ## Note: The outer njit function *supposedly* does not need to be supplied parallel=True.
 
 
-@nb.njit(parallel=True, inline="always")
-def _shift_left(arr: np.ndarray[f8], shift: i8 = -1) -> np.ndarray[f8]:
-    shifted = np.empty_like(arr)
+@nb.njit(parallel=True)
+def _shift(arr: np.ndarray[f8], shift: i8 = -1) -> np.ndarray[f8]:
+    shifted = np.empty(arr.size, dtype=np.float64)
     for i in nb.prange(-shift, arr.size):
         shifted[i] = arr[shift]
     return shifted
 
 
-@nb.njit(inline="always")
+@nb.njit(parallel=True, inline="always")
 def _prefix_sum(arr: np.ndarray[i4]) -> np.ndarray[f8]:
     prefix_sum = np.empty(arr.shape, dtype=np.int32)
     prefix_sum[0] = arr[0]
-    for i in range(1, arr.size):
+    for i in nb.prange(1, arr.size):
         prefix_sum[i] = arr[i] + prefix_sum[i - 1]
+
     return prefix_sum
 
 
@@ -43,27 +43,6 @@ def _empty(
     for i in nb.prange(fill_zeros):
         arr[i] = 0
     return arr
-
-
-@nb.njit(parallel=True, inline="always")
-def _highs_lows(
-    high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
-) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
-    highs = np.empty(high.shape, dtype=np.float64)
-    lows = np.empty(low.shape, dtype=np.float64)
-
-    for i in nb.prange(period, to_range):
-        max_high = -np.inf
-        min_low = np.inf
-        for j in range(i - period, i):
-            if high[j] > max_high:
-                max_high = high[j]
-            if low[j] < min_low:
-                min_low = low[j]
-        highs[i - 1] = max_high
-        lows[i - 1] = min_low
-
-    return highs, lows
 
 
 @nb.njit(parallel=True, inline="always")
@@ -457,6 +436,27 @@ def _adx_update(
     return ((adx_p * n_1) + dx) / adx_period
 
 
+@nb.njit(parallel=True, inline="always")
+def _highs_lows(
+    high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
+) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
+    highs = np.empty(high.shape, dtype=np.float64)
+    lows = np.empty(low.shape, dtype=np.float64)
+
+    for i in nb.prange(period, to_range):
+        max_high = 0
+        min_low = np.inf
+        for j in range(i - period, i):
+            if high[j] > max_high:
+                max_high = high[j]
+            if low[j] < min_low:
+                min_low = low[j]
+        highs[i - 1] = max_high
+        lows[i - 1] = min_low
+
+    return highs, lows
+
+
 @nb.njit(parallel=True)
 def _ichimoku_cloud(
     high: np.ndarray[f8],
@@ -533,10 +533,10 @@ def _ichimoku_cloud_update(
     senkou_period: i4 = 52,
 ) -> tuple[f8, f8, f8, f8, np.ndarray[f8], np.ndarray[f8]]:
 
-    high = _shift_left(high)
+    high = _shift(high)
     high[-1] = next_high
 
-    low = _shift_left(low)
+    low = _shift(low)
     low[-1] = next_low
 
     # Compute tenkan, kijun, senkou_a, senkou_b values
