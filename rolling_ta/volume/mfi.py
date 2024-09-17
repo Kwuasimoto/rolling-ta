@@ -1,4 +1,5 @@
 from pandas import DataFrame
+from rolling_ta.extras.numba import _mfi
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 import pandas as pd
@@ -6,7 +7,58 @@ import numpy as np
 
 from collections import deque
 
-from typing import Deque
+from typing import Deque, Dict
+
+
+class NumbaMFI(Indicator):
+    def __init__(
+        self,
+        data: DataFrame,
+        period: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        """
+        Initialize the MFI indicator.
+
+        Args:
+            data (pd.DataFrame): The initial dataframe containing price and volume data.
+            period (int): Default=14 | The period over which to calculate the MFI.
+            memory (bool): Default=True | Whether to store MFI values in memory.
+            init (bool): Default=True | Whether to calculate the initial MFI values upon instantiation.
+        """
+        super().__init__(data, period, memory, retention, init)
+
+        if self._init:
+            self.init()
+
+    def init(self):
+        high = self._data["high"].copy().to_numpy(np.float64)
+        low = self._data["low"].copy().to_numpy(np.float64)
+        close = self._data["close"].copy().to_numpy(np.float64)
+        volume = self._data["volume"].copy().to_numpy(np.float64)
+
+        mfi, mfp, mfn, prev_typical = _mfi(
+            high,
+            low,
+            close,
+            volume,
+            self._period_config,
+        )
+
+        if self._memory:
+            self._mfi = list(mfi)
+
+        self._prev_typical = prev_typical
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        return super().update(data)
+
+    def mfi(self):
+        return pd.Series(self._mfi)
 
 
 class MFI(Indicator):
@@ -19,8 +71,9 @@ class MFI(Indicator):
 
     Material
     --------
-        https://www.investopedia.com/terms/s/standarddeviation.asp
-        https://pypi.org/project/ta/
+     - https://www.investopedia.com/terms/m/mfi.asp
+     - https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/money-flow-index-mfi
+     - https://pypi.org/project/ta/
 
     Attributes
     ----------

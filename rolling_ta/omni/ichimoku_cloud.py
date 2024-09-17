@@ -1,8 +1,135 @@
 from typing import Dict, Union
 import numpy as np
 import pandas as pd
+from rolling_ta.extras.numba import _ichimoku_cloud, _ichimoku_cloud_update
 from rolling_ta.indicator import Indicator
+from rolling_ta.logging import logger
 from collections import deque
+
+
+class NumbaIchimokuCloud(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[str, int] = {"tenkan": 9, "kijun": 26, "senkou": 52},
+        memory: bool = True,
+        retention: Union[int, None] = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+
+        if not isinstance(self._period_config, dict):
+            raise ValueError(
+                "Ichimoku Cloud period config must be a dictionary. \nPlease review the docstring or use help(indicator) for more information."
+            )
+
+        # Deconstruct period config to attributes to avoid function overhead
+        self._tenkan_period = self.period("tenkan")
+        self._kijun_period = self.period("kijun")
+        self._senkou_period = self.period("senkou")
+
+        if self._init:
+            self.init()
+
+    def init(self):
+        high = self._data["high"].to_numpy(np.float64)
+        low = self._data["low"].to_numpy(np.float64)
+
+        (
+            tenkan,
+            kijun,
+            senkou_a,
+            senkou_b,
+            high_clip,
+            low_clip,
+            tenkan_latest,
+            kijun_latest,
+            senkou_a_latest,
+            senkou_b_latest,
+        ) = _ichimoku_cloud(
+            high.copy(),
+            low.copy(),
+            self._tenkan_period,
+            self._kijun_period,
+            self._senkou_period,
+        )
+
+        if self._memory:
+            self._tenkan = list(tenkan)
+            self._kijun = list(kijun)
+            self._senkou_a = list(senkou_a)
+            self._senkou_b = list(senkou_b)
+
+        self._tenkan_latest = tenkan_latest
+        self._kijun_latest = kijun_latest
+        self._senkou_a_latest = senkou_a_latest
+        self._senkou_b_latest = senkou_b_latest
+
+        # Store related information for required updates
+        self._high = high_clip
+        self._low = low_clip
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        high = data["high"]
+        low = data["low"]
+
+        (
+            tenkan,
+            kijun,
+            senkou_a,
+            senkou_b,
+            high,
+            low,
+        ) = _ichimoku_cloud_update(
+            self._high,
+            high,
+            self._low,
+            low,
+            self._tenkan_period,
+            self._kijun_period,
+            self._senkou_period,
+        )
+
+        if self._memory:
+            self._tenkan.append(tenkan)
+            self._kijun.append(kijun)
+            self._senkou_a.append(senkou_a)
+            self._senkou_b.append(senkou_b)
+
+        self._tenkan_latest = tenkan
+        self._kijun_latest = kijun
+        self._senkou_a_latest = senkou_a
+        self._senkou_b_latest = senkou_b
+
+        self._high = high
+        self._low = low
+
+    def tenkan(self):
+        return np.array(self._tenkan)
+
+    def tenkan_latest(self):
+        return self._tenkan_latest
+
+    def kijun(self):
+        return np.array(self._kijun)
+
+    def kijun_latest(self):
+        return self._kijun_latest
+
+    def senkou_a(self):
+        return np.array(self._senkou_a)
+
+    def senkou_a_latest(self):
+        return self._senkou_a_latest
+
+    def senkou_b(self):
+        return np.array(self._senkou_b)
+
+    def senkou_b_latest(self):
+        return self._senkou_b_latest
 
 
 class IchimokuCloud(Indicator):
@@ -167,13 +294,6 @@ class IchimokuCloud(Indicator):
             self._lagging[self._count] = self._lagging_latest
 
             self._count += 1
-
-            if self._retention:
-                self._tenkan = self.apply_retention(self._tenkan)
-                self._kijun = self.apply_retention(self._tenkan)
-                self._senkou_a = self.apply_retention(self._senkou_a)
-                self._senkou_b = self.apply_retention(self._senkou_b)
-                self._lagging = self.apply_retention(self._lagging)
 
     def tenkan(self):
         return self._tenkan

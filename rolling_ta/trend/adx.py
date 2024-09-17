@@ -3,22 +3,12 @@ from rolling_ta.extras.numba import _dx, _adx, _dx_update, _adx_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
 from rolling_ta.trend import DMI, NumbaDMI
-from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
 from typing import Optional, Union
 
 
-def expMovingAverage(values, window):
-    weights = np.exp(np.linspace(-1.0, 0.0, window))
-    weights /= weights.sum()
-    a = np.convolve(values, weights, mode="full")[: len(values)]
-    a[:window] = a[window]
-    return a
-
-
-# Has 100% correct implementation.
 class NumbaADX(Indicator):
 
     def __init__(
@@ -32,6 +22,7 @@ class NumbaADX(Indicator):
         tr: Optional[NumbaTrueRange] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
+        self._n_1 = period_config - 1
         self._dmi = (
             NumbaDMI(data, period_config, memory, retention, init, tr)
             if dmi is None
@@ -51,7 +42,7 @@ class NumbaADX(Indicator):
         adx, adx_p = _adx(dx, self._period_config, self._dmi._period_config)
 
         if self._memory:
-            self._adx = adx
+            self._adx = list(adx)
 
         self._dx_p = dx_p
         self._adx_p = adx_p
@@ -65,10 +56,18 @@ class NumbaADX(Indicator):
             self._dmi.pdmi_latest(),
             self._dmi.ndmi_latest(),
         )
-        self._adx_p = _adx_update(self._dx_p, self._adx_p, self._period_config)
+        self._adx_p = _adx_update(
+            self._dx_p,
+            self._adx_p,
+            self._period_config,
+            self._n_1,
+        )
+
+        if self._memory:
+            self._adx.append(self._adx_p)
 
     def adx(self):
-        return self._adx
+        return pd.Series(self._adx)
 
     def adx_latest(self):
         return self._adx_p
@@ -79,6 +78,8 @@ class NumbaADX(Indicator):
 
 class ADX(Indicator):
     """
+    Deprecated: use NumbaADX.
+
     A class to represent the Average Directional Index (ADX) indicator.
 
     The ADX is a technical indicator used to measure the strength of a trend.

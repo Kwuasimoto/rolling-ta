@@ -9,7 +9,6 @@ from rolling_ta.extras.numba import (
 )
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TrueRange, NumbaTrueRange, AverageTrueRange
-from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
@@ -47,10 +46,9 @@ class NumbaDMI(Indicator):
         s_pdm, s_pdm_p = _dm_smoothing(pdm)
         s_ndm, s_ndm_p = _dm_smoothing(ndm)
 
-        pdmi, pdmi_p = _dmi(s_pdm, s_tr)
-        ndmi, ndmi_p = _dmi(s_ndm, s_tr)
+        pdmi, pdmi_p = _dmi(s_pdm, s_tr, self._period_config)
+        ndmi, ndmi_p = _dmi(s_ndm, s_tr, self._period_config)
 
-        # ADX Does not use the initial TR value (high-low). Only valid True Range calculations.
         if self._memory:
             self._pdmi = pdmi
             self._ndmi = ndmi
@@ -111,6 +109,10 @@ class NumbaDMI(Indicator):
 
 # Incorrect implementation, use Numba version.
 class DMI(Indicator):
+    """_summary_
+
+    Deprecated: Incorrect implementation, use NumbaADX / NumbaDMI.
+    """
 
     _pdi: pd.Series
     _ndi: pd.Series

@@ -5,6 +5,7 @@ from .numba import (
     _ema_update,
     _obv,
     _obv_update,
+    _mfi,
     _tr,
     _tr_update,
     _atr,
@@ -19,6 +20,8 @@ from .numba import (
     _dx_update,
     _adx,
     _adx_update,
+    _ichimoku_cloud,
+    _ichimoku_cloud_update,
 )
 
 __all__ = [
@@ -28,6 +31,7 @@ __all__ = [
     "_ema_update",
     "_obv",
     "_obv_update",
+    "_mfi",
     "_tr",
     "_tr_update",
     "_atr",
@@ -42,4 +46,6 @@ __all__ = [
     "_dx_update",
     "_adx",
     "_adx_update",
+    "_ichimoku_cloud",
+    "_ichimoku_cloud_update",
 ]
