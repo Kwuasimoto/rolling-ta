@@ -573,17 +573,13 @@ def _adx_update(
 def _highs_lows(
     high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
 ) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
-    highs = _empty(high.size, period, dtype=np.float64)
-    lows = _empty(low.size, period, dtype=np.float64)
+    n = high.shape[0]
+    highs = _empty(n, period, dtype=np.float64)  # Initialize all values to zero
+    lows = _empty(n, period, dtype=np.float64)  # Initialize lows to infinity
 
     for i in nb.prange(period, to_range):
-        max_high = 0
-        min_low = np.inf
-        for j in range(i - period, i):
-            if high[j] > max_high:
-                max_high = high[j]
-            if low[j] < min_low:
-                min_low = low[j]
+        max_high = np.max(high[i - period : i])  # Use vectorized np.max
+        min_low = np.min(low[i - period : i])  # Use vectorized np.min
         highs[i - 1] = max_high
         lows[i - 1] = min_low
 
@@ -617,33 +613,28 @@ def _ichimoku_cloud(
     to_range = n + 1
     a_start = max(tenkan_period, kijun_period) - 1
 
-    tenkan_highs = _empty(n, tenkan_period, dtype=np.float64)
-    tenkan_lows = _empty(n, tenkan_period, dtype=np.float64)
-    kijun_highs = _empty(n, kijun_period, dtype=np.float64)
-    kijun_lows = _empty(n, kijun_period, dtype=np.float64)
-    senkou_highs = _empty(n, senkou_period, dtype=np.float64)
-    senkou_lows = _empty(n, senkou_period, dtype=np.float64)
-
-    tenkan = _empty(n, tenkan_period, dtype=np.float64)
-    kijun = _empty(n, kijun_period, dtype=np.float64)
-    senkou_a = _empty(n, senkou_period, dtype=np.float64)
-    senkou_b = _empty(n, senkou_period, dtype=np.float64)
-
+    # Reuse arrays to avoid multiple memory allocations
     tenkan_highs, tenkan_lows = _highs_lows(high, low, tenkan_period, to_range)
     kijun_highs, kijun_lows = _highs_lows(high, low, kijun_period, to_range)
     senkou_highs, senkou_lows = _highs_lows(high, low, senkou_period, to_range)
 
-    for i in nb.prange(n):
-        tenkan[i] = (tenkan_highs[i] + tenkan_lows[i]) * 0.5
-        kijun[i] = (kijun_highs[i] + kijun_lows[i]) * 0.5
-        senkou_b[i] = (senkou_highs[i] + senkou_lows[i]) * 0.5
+    # Reuse arrays for calculated outputs
+    tenkan = (tenkan_highs + tenkan_lows) * 0.5
+    kijun = (kijun_highs + kijun_lows) * 0.5
+    senkou_b = (senkou_highs + senkou_lows) * 0.5
 
+    # Initialize senkou_a for later use
+    senkou_a = np.zeros(n, dtype=np.float64)
+
+    # Compute senkou_a values from a_start
     for i in nb.prange(a_start, n):
         senkou_a[i] = (tenkan[i] + kijun[i]) * 0.5
 
+    # Fill in missing values at the beginning with appropriate start values
     senkou_a[:a_start] = senkou_a[a_start]
     senkou_b[: senkou_period - 1] = senkou_b[senkou_period - 1]
 
+    # Find the greatest period for later range slicing
     greatest_period = max(tenkan_period, kijun_period, senkou_period)
 
     return (

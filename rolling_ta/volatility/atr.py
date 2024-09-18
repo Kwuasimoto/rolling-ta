@@ -1,3 +1,4 @@
+from array import array
 from pandas import DataFrame
 from rolling_ta.indicator import Indicator
 from rolling_ta.extras.numba import _atr, _atr_update
@@ -8,6 +9,58 @@ import pandas as pd
 import numpy as np
 
 from typing import Dict, Optional
+
+
+class NumbaAverageTrueRange(Indicator):
+
+    def __init__(
+        self,
+        data: DataFrame,
+        period_config: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+        true_range: Optional[TrueRange] = None,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        self._tr = TrueRange(data, period_config) if true_range is None else true_range
+        self._n_1 = self._period_config - 1
+        if self._init:
+            self.init()
+
+    def init(self):
+        if not self._init:
+            self._tr.init()
+
+        atr = _atr(
+            self._tr.tr().to_numpy(np.float64),
+            self._period_config,
+            self._n_1,
+        )
+
+        if self._memory:
+            self._atr = array("f", atr)
+
+        self._atr_latest = self._atr[-1]
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+
+        self._tr.update(data)
+
+        self._atr_latest = _atr_update(
+            self._atr_latest,
+            self._tr._tr_latest,
+            self._period_config,
+            self._n_1,
+        )
+
+        if self._memory:
+            self._atr.append(self._atr_latest)
+
+    def atr(self):
+        return self._atr
 
 
 class AverageTrueRange(Indicator):
@@ -157,55 +210,3 @@ class AverageTrueRange(Indicator):
             float: The latest RSI value.
         """
         return self._atr_latest
-
-
-class NumbaAverageTrueRange(Indicator):
-
-    def __init__(
-        self,
-        data: DataFrame,
-        period_config: int = 14,
-        memory: bool = True,
-        retention: int = 20000,
-        init: bool = True,
-        true_range: Optional[TrueRange] = None,
-    ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
-        self._tr = TrueRange(data, period_config) if true_range is None else true_range
-        self._n_1 = self._period_config - 1
-        if self._init:
-            self.init()
-
-    def init(self):
-        if not self._init:
-            self._tr.init()
-
-        atr = _atr(
-            self._tr.tr().to_numpy(np.float64),
-            self._period_config,
-            self._n_1,
-        )
-
-        if self._memory:
-            self._atr = atr
-
-        self._atr_latest = self._atr[-1]
-
-        self.drop_data()
-
-    def update(self, data: pd.Series):
-
-        self._tr.update(data)
-
-        self._atr_latest = _atr_update(
-            self._atr_latest,
-            self._tr._tr_latest,
-            self._period_config,
-            self._n_1,
-        )
-
-        if self._memory:
-            self._atr = np.append(self._atr, self._atr_latest)
-
-    def atr(self):
-        return self._atr

@@ -1,3 +1,4 @@
+from array import array
 from typing import Dict, Union
 import numpy as np
 import pandas as pd
@@ -56,10 +57,10 @@ class NumbaIchimokuCloud(Indicator):
         )
 
         if self._memory:
-            self._tenkan = list(tenkan)
-            self._kijun = list(kijun)
-            self._senkou_a = list(senkou_a)
-            self._senkou_b = list(senkou_b)
+            self._tenkan = array("f", tenkan)
+            self._kijun = array("f", kijun)
+            self._senkou_a = array("f", senkou_a)
+            self._senkou_b = array("f", senkou_b)
 
         self._tenkan_latest = tenkan_latest
         self._kijun_latest = kijun_latest

@@ -1,3 +1,4 @@
+from array import array
 from typing import Optional
 from rolling_ta.extras.numba import (
     _dm,
@@ -58,8 +59,8 @@ class NumbaDMI(Indicator):
         self._s_ndm_p = s_ndm_p
 
         if self._memory:
-            self._pdmi = list(pdmi)
-            self._ndmi = list(ndmi)
+            self._pdmi = array(pdmi)
+            self._ndmi = array(ndmi)
         self.drop_data()
 
     def update(self, data: pd.Series):

@@ -1,3 +1,4 @@
+from array import array
 from pandas import DataFrame
 from rolling_ta.extras.numba import _mfi
 from rolling_ta.indicator import Indicator
@@ -48,7 +49,7 @@ class NumbaMFI(Indicator):
         )
 
         if self._memory:
-            self._mfi = list(mfi)
+            self._mfi = array(mfi)
 
         self._prev_typical = prev_typical
 

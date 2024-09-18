@@ -1,3 +1,4 @@
+from array import array
 from pandas import DataFrame, Series
 from rolling_ta.extras.numba import _dx, _adx, _dx_update, _adx_update
 from rolling_ta.indicator import Indicator
@@ -42,7 +43,7 @@ class NumbaADX(Indicator):
         adx, adx_p = _adx(dx, self._period_config, self._dmi._period_config)
 
         if self._memory:
-            self._adx = list(adx)
+            self._adx = array(adx)
 
         self._dx_p = dx_p
         self._adx_p = adx_p
