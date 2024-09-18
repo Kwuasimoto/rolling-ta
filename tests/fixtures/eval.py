@@ -14,6 +14,7 @@ def evaluate(log: Logger):
             pytest.fail(
                 f"Length equivalency failed: [expected={len(expected)}, rolling={len(rolling)}]"
             )
+            raise Exception("STOP")
         for i, [e, r] in enumerate(zip(expected, rolling)):
             if e != r:
                 log.error(f"Test failed: [index={i}, expected={e}, rolling={r}]")
@@ -21,5 +22,6 @@ def evaluate(log: Logger):
                     f"Test failed: [expected=\n{expected}\n, rolling=\n{rolling}\n]"
                 )
                 pytest.fail(f"Test failed: [index={i}, expected={e}, rolling={r}]")
+                raise Exception("STOP")
 
     return e

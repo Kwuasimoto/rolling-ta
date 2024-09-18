@@ -29,8 +29,9 @@ class NumbaSMA(Indicator):
 
     def init(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
+        sma = np.zeros(close.size)
 
-        sma, window, window_sum, latest = _sma(close, self._period_config)
+        sma, window, window_sum, latest = _sma(close, sma, self._period_config)
 
         self._window = window
         self._window_sum = window_sum

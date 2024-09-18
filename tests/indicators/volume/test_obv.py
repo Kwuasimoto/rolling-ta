@@ -20,7 +20,9 @@ def test_obv_update(obv_df: pd.DataFrame, evaluate: Eval):
 
 
 def test_numba_obv(obv_df: pd.DataFrame, evaluate: Eval):
-    evaluate(obv_df["obv"].astype("float64").fillna(0).round(4), NumbaOBV(obv_df).obv())
+    expected = obv_df["obv"].astype("float64").fillna(0).round(4)
+    rolling = NumbaOBV(obv_df).obv()
+    evaluate(expected, rolling)
 
 
 def test_numba_obv_update(obv_df: pd.DataFrame, evaluate: Eval):

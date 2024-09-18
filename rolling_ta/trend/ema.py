@@ -24,11 +24,17 @@ class NumbaEMA(Indicator):
             self.init()
 
     def init(self):
-
         close = self._data["close"].to_numpy(dtype=np.float64)
-        ema = _ema(close, self._weight, self._period_config)
+        ema = np.zeros(close.size)
 
-        self._ema_latest = ema[-1]
+        ema, ema_latest = _ema(
+            close,
+            ema,
+            self._weight,
+            self._period_config,
+        )
+
+        self._ema_latest = ema_latest
 
         if self._memory:
             self._ema = array("f", ema)

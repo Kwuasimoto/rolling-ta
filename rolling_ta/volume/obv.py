@@ -25,7 +25,7 @@ class NumbaOBV(Indicator):
     def init(self):
         close = self._data["close"].to_numpy(np.float64)
         volume = self._data["volume"].to_numpy(np.float64)
-        obv = np.empty(close.size, dtype=np.float64)
+        obv = np.zeros(close.size, dtype=np.float64)
 
         obv, obv_latest, close_latest = _obv(close, volume, obv)
 

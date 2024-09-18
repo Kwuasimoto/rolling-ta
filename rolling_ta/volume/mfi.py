@@ -40,16 +40,25 @@ class NumbaMFI(Indicator):
         close = self._data["close"].copy().to_numpy(np.float64)
         volume = self._data["volume"].copy().to_numpy(np.float64)
 
+        typical_price = np.zeros(volume.size, dtype=np.float64)
+        mfp = np.zeros(volume.size, dtype=np.float64)
+        mfn = np.zeros(volume.size, dtype=np.float64)
+        mfi = np.zeros(volume.size, dtype=np.float64)
+
         mfi, mfp, mfn, prev_typical = _mfi(
             high,
             low,
             close,
             volume,
+            typical_price,
+            mfp,
+            mfn,
+            mfi,
             self._period_config,
         )
 
         if self._memory:
-            self._mfi = array(mfi)
+            self._mfi = array("f", mfi)
 
         self._prev_typical = prev_typical
 

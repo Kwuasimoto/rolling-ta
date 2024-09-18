@@ -151,17 +151,17 @@ def _sliding_midpoint(
 )
 def _sma(
     data: np.ndarray[f8],
+    sma_container: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f8], np.ndarray[f8], f8, f8]:
-    sma: np.ndarray[f8] = _empty(data.size, period)
     current_sum: f8 = 0.0
     for i in nb.prange(period):
         current_sum += data[i]
-    sma[period - 1] = current_sum / period
+    sma_container[period - 1] = current_sum / period
     for i in range(period, data.size):
         current_sum += data[i] - data[i - period]
-        sma[i] = current_sum / period
-    return sma, data[-period:], current_sum, sma[-1]
+        sma_container[i] = current_sum / period
+    return sma_container, data[-period:], current_sum, sma_container[-1]
 
 
 @nb.njit(
@@ -188,19 +188,19 @@ def _sma_update(
 )
 def _ema(
     data: np.ndarray[f8],
+    ema_container: np.ndarray[f8],
     weight: f8,
     period: i4 = 14,
-) -> np.ndarray[f8]:
-    ema = _empty(data.size, period)
+) -> tuple[np.ndarray[f8], f8]:
     current_sum = 0.0
     for i in nb.prange(period):
         current_sum += data[i]
     ema_prev = current_sum / period
-    ema[period - 1] = ema_prev
+    ema_container[period - 1] = ema_prev
     for i in range(period, data.shape[0]):
         ema_prev = ((data[i] - ema_prev) * weight) + ema_prev
-        ema[i] = ema_prev
-    return ema
+        ema_container[i] = ema_prev
+    return ema_container, ema_container[-1]
 
 
 @nb.njit(
@@ -303,7 +303,7 @@ def _obv(
     close: np.ndarray[f8],
     volume: np.ndarray[f8],
     obv_container: np.ndarray[f8],
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8, f8]:
     n = close.size
 
     for i in nb.prange(1, n):
@@ -349,27 +349,26 @@ def _mfi(
     low: np.ndarray[f8],
     close: np.ndarray[f8],
     volume: np.ndarray[f8],
+    typical_price_container: np.ndarray[f8],
+    mfp_container: np.ndarray[f8],
+    mfn_container: np.ndarray[f8],
+    mfi_container: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f4], np.ndarray[f8], np.ndarray[f8], f8]:
     # MFI should be between 0 and 100, which is f2 compatible.
     n = close.size
 
-    typical_price = _empty(n, dtype=np.float64)
-    mfp = _empty(n, period, dtype=np.float64)
-    mfn = _empty(n, period, dtype=np.float64)
-    mfi = _empty(n, period, dtype=np.float32)
-
     for i in nb.prange(n):
-        typical_price[i] = (high[i] + low[i] + close[i]) / 3
+        typical_price_container[i] = (high[i] + low[i] + close[i]) / 3
 
     for i in nb.prange(1, n):
-        curr_typical = typical_price[i]
-        prev_typical = typical_price[i - 1]
+        curr_typical = typical_price_container[i]
+        prev_typical = typical_price_container[i - 1]
 
         if curr_typical > prev_typical:
-            mfp[i] = curr_typical * volume[i]
+            mfp_container[i] = curr_typical * volume[i]
         elif curr_typical < prev_typical:
-            mfn[i] = curr_typical * volume[i]
+            mfn_container[i] = curr_typical * volume[i]
 
     n = close.size
     for i in nb.prange(0, n - period + 1):
@@ -378,19 +377,24 @@ def _mfi(
         mfn_sum = 0.0
 
         for j in nb.prange(i, i + period):
-            if mfp[j] > 0:
-                mfp_sum += mfp[j]
-            elif mfn[j] > 0:
-                mfn_sum += mfn[j]
+            if mfp_container[j] > 0:
+                mfp_sum += mfp_container[j]
+            elif mfn_container[j] > 0:
+                mfn_sum += mfn_container[j]
 
         if mfp_sum == 0:
-            mfi[i_p] = 0
+            mfi_container[i_p] = 0
         elif mfn_sum == 0:
-            mfi[i_p] = 100
+            mfi_container[i_p] = 100
         else:
-            mfi[i_p] = (100 * mfp_sum) / (mfp_sum + mfn_sum)
+            mfi_container[i_p] = (100 * mfp_sum) / (mfp_sum + mfn_sum)
 
-    return mfi, mfp[-period:], mfn[-period:], typical_price[-1]
+    return (
+        mfi_container,
+        mfp_container[-period:],
+        mfn_container[-period:],
+        typical_price_container[-1],
+    )
 
 
 @nb.njit(
@@ -413,19 +417,22 @@ def _tr(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
     close: np.ndarray[f8],
-) -> np.ndarray[f8]:
+    close_p_container: np.ndarray[f8],
+    tr_container: np.ndarray[f8],
+) -> tuple[np.ndarray[f8], f8, f8]:
     n = close.size
 
-    close_p = _empty(n, dtype=np.float64)
-    tr = _empty(n, dtype=np.float64)
-
-    close_p[1:] = close[:-1]
-    tr[0] = high[0] - low[0]
+    close_p_container[1:] = close[:-1]
+    tr_container[0] = high[0] - low[0]
 
     for i in nb.prange(1, n):
-        tr[i] = max(high[i] - low[i], abs(high[i] - close_p[i]), close_p[i] - low[i])
+        tr_container[i] = max(
+            high[i] - low[i],
+            abs(high[i] - close_p_container[i]),
+            close_p_container[i] - low[i],
+        )
 
-    return tr
+    return tr_container, tr_container[-1], close_p_container[-1]
 
 
 @nb.njit(
