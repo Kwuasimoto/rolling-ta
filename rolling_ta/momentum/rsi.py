@@ -1,11 +1,50 @@
+from array import array
 from typing import Deque
 import numpy as np
 import pandas as pd
 
+from rolling_ta.extras.numba import _rsi
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 
 from collections import deque
+
+
+class NumbaRSI(Indicator):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 14,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        """
+        Initialize the RSI indicator.
+
+        Args:
+            data (pd.DataFrame): The initial dataframe containing price data with a 'close' column.
+            period (int): Default=14 | The period over which to calculate the RSI.
+            memory (bool): Default=True | Whether to store RSI values in memory.
+            retention (int): Default=20000 | The maximum number of RSI values to store in memory
+            init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
+        """
+        super().__init__(data, period_config, memory, retention, init)
+        if init:
+            self.init()
+
+    def init(self):
+        close = self._data["close"].to_numpy(np.float64)
+
+        rsi, avg_gain, avg_loss, close_p = _rsi(close, self._period_config)
+
+        if self._memory:
+            self._rsi = array("f", rsi)
+
+        self.drop_data()
+
+    def rsi(self):
+        return pd.Series(self._rsi)
 
 
 # Math derived from chatGPT + https://www.investopedia.com/terms/r/rsi.asp
@@ -126,6 +165,7 @@ class RSI(Indicator):
         ).mean()
 
         emw_rsi = (100 * emw_gains) / (emw_gains + emw_losses)
+
         rsi[self._period_config :] = emw_rsi[self._period_config :]
         self._rsi_latest = rsi.iloc[-1]
 

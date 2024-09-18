@@ -43,7 +43,7 @@ class NumbaADX(Indicator):
         adx, adx_p = _adx(dx, self._period_config, self._dmi._period_config)
 
         if self._memory:
-            self._adx = array(adx)
+            self._adx = array("f", adx)
 
         self._dx_p = dx_p
         self._adx_p = adx_p

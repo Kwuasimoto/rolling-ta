@@ -48,8 +48,8 @@ class NumbaDMI(Indicator):
         s_pdm, s_pdm_p = _dm_smoothing(pdm, self._period_config)
         s_ndm, s_ndm_p = _dm_smoothing(ndm, self._period_config)
 
-        pdmi = _dmi(s_pdm, s_tr, self._period_config)
-        ndmi = _dmi(s_ndm, s_tr, self._period_config)
+        self._pdmi = _dmi(s_pdm, s_tr, self._period_config)
+        self._ndmi = _dmi(s_ndm, s_tr, self._period_config)
 
         self._high_p = high_p
         self._low_p = low_p
@@ -59,8 +59,9 @@ class NumbaDMI(Indicator):
         self._s_ndm_p = s_ndm_p
 
         if self._memory:
-            self._pdmi = array(pdmi)
-            self._ndmi = array(ndmi)
+            self._pdmi = array("f", self._pdmi)
+            self._ndmi = array("f", self._ndmi)
+
         self.drop_data()
 
     def update(self, data: pd.Series):

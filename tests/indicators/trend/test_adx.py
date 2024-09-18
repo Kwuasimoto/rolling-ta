@@ -17,7 +17,7 @@ def test_numba_adx(btc_df: pd.DataFrame, evaluate: Eval):
     expected = ADXIndicator(data["high"], data["low"], data["close"])
     rolling = NumbaADX(data)
 
-    evaluate(expected.adx().round(4), rolling.adx().round(4))
+    evaluate(expected.adx().round(3), rolling.adx().round(3))
 
 
 def test_numba_adx_update(btc_df: pd.DataFrame, evaluate: Eval):
@@ -31,6 +31,6 @@ def test_numba_adx_update(btc_df: pd.DataFrame, evaluate: Eval):
 
     rolling_ema = rolling
     evaluate(
-        expected.adx().to_numpy(np.float64).round(4),
-        rolling_ema.adx().to_numpy(np.float64).round(4),
+        expected.adx().to_numpy(np.float64).round(3),
+        rolling_ema.adx().to_numpy(np.float64).round(3),
     )

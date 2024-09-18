@@ -26,13 +26,13 @@ class NumbaTrueRange(Indicator):
         low = self._data["low"].to_numpy(np.float64)
         close = self._data["close"].to_numpy(np.float64)
 
-        tr = _tr(high, low, close)
+        self._tr = _tr(high, low, close)
 
         if self._memory:
-            self._tr = array("f", tr)
+            self._tr = array("f", self._tr)
 
         self._close_p = close[-1]
-        self._tr_latest = tr[-1]
+        self._tr_latest = self._tr[-1]
 
         self.drop_data()
 

@@ -42,6 +42,27 @@ def ema_df(xls_loader: XLSLoader):
         pytest.fail(str(fnfe))
 
 
+@pytest.fixture(name="rsi_df")
+def rsi_df(xls_loader: XLSLoader):
+    try:
+        return xls_loader.read_resource(
+            "cs-rsi.xlsx",
+            columns=[
+                "date",
+                "close",
+                "change",
+                "gain",
+                "loss",
+                "avg_gain",
+                "avg_loss",
+                "rs",
+                "rsi",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
 # Used in TrueRange tests.
 @pytest.fixture(name="atr_df")
 def atr_df(xls_loader: XLSLoader):
@@ -88,4 +109,3 @@ def adx_df(xls_loader: XLSLoader):
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
-        

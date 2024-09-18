@@ -48,6 +48,28 @@ def _shift(
 
 
 @nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _highs_lows(
+    high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
+) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
+    n = high.shape[0]
+    highs = _empty(n, period, dtype=np.float64)  # Initialize all values to zero
+    lows = _empty(n, period, dtype=np.float64)  # Initialize lows to infinity
+
+    for i in nb.prange(period, to_range):
+        max_high = np.max(high[i - period : i])  # Use vectorized np.max
+        min_low = np.min(low[i - period : i])  # Use vectorized np.min
+        highs[i - 1] = max_high
+        lows[i - 1] = min_low
+
+    return highs, lows
+
+
+@nb.njit(
     inline="always",
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
@@ -346,12 +368,12 @@ def _atr(
     tr: np.ndarray[f8],
     period: i4 = 14,
     n_1: i4 = 13,
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8]:
     atr = _empty(tr.size, period, dtype=np.float64)
     atr[period - 1] = _mean(tr[:period])
     for i in range(period, tr.size):
         atr[i] = ((atr[i - 1] * n_1) + tr[i]) / period
-    return atr
+    return atr, atr[-1]
 
 
 @nb.njit(
@@ -564,26 +586,37 @@ def _adx_update(
     return ((adx_p * n_1) + dx) / adx_period
 
 
-@nb.njit(
-    parallel=True,
-    inline="always",
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
-def _highs_lows(
-    high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
-) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
-    n = high.shape[0]
-    highs = _empty(n, period, dtype=np.float64)  # Initialize all values to zero
-    lows = _empty(n, period, dtype=np.float64)  # Initialize lows to infinity
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+def _rsi(
+    close: np.ndarray[f8],
+    period: i4 = 14,
+) -> tuple[np.ndarray[f8], f8, f8, f8]:
+    n = close.size
 
-    for i in nb.prange(period, to_range):
-        max_high = np.max(high[i - period : i])  # Use vectorized np.max
-        min_low = np.min(low[i - period : i])  # Use vectorized np.min
-        highs[i - 1] = max_high
-        lows[i - 1] = min_low
+    rsi = _empty(n, period, dtype=np.float64)
+    gains = np.zeros(n, dtype=np.float64)
+    losses = np.zeros(n, dtype=np.float64)
 
-    return highs, lows
+    # Phase 1 (SMA)
+    for i in nb.prange(1, n):
+        delta = close[i] - close[i - 1]
+        if delta > 0:
+            gains[i] = delta
+        elif delta < 0:
+            losses[i] = -delta
+
+    avg_gain = _mean(gains[1 : period + 1])
+    avg_loss = _mean(losses[1 : period + 1])
+
+    rsi[period] = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    # Phase 2 (EMA)
+    for i in range(period + 1, n):
+        avg_gain = ((avg_gain * (period - 1)) + gains[i]) / period
+        avg_loss = ((avg_loss * (period - 1)) + losses[i]) / period
+        rsi[i] = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    return rsi, avg_gain, avg_loss, close[-1]
 
 
 @nb.njit(
