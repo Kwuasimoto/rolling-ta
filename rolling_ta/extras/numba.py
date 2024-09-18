@@ -1,3 +1,4 @@
+from functools import cache
 import os
 import numba as nb
 import numpy as np
@@ -616,6 +617,30 @@ def _rsi(
         rsi[i] = (100 * avg_gain) / (avg_gain + avg_loss)
 
     return rsi, avg_gain, avg_loss, close[-1]
+
+
+@nb.njit(
+    cache=True,
+    fastmath=True,
+)
+def _rsi_update(
+    close: f8,
+    prev_close: f8,
+    avg_gain: f8,
+    avg_loss: f8,
+    p_1: f8 = 13,
+) -> tuple[f8, f8, f8]:
+    delta = close - prev_close
+
+    gain = max(delta, 0)
+    loss = -min(delta, 0)
+
+    avg_gain = p_1 * (gain - avg_gain) + avg_gain
+    avg_loss = p_1 * (loss - avg_loss) + avg_loss
+
+    rsi = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    return rsi, avg_gain, avg_loss
 
 
 @nb.njit(

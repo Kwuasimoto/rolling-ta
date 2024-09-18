@@ -3,7 +3,7 @@ from typing import Deque
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _rsi
+from rolling_ta.extras.numba import _rsi, _rsi_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 
@@ -30,18 +30,44 @@ class NumbaRSI(Indicator):
             init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
         """
         super().__init__(data, period_config, memory, retention, init)
+        self.alpha = 1 / self._period_config
         if init:
             self.init()
 
     def init(self):
         close = self._data["close"].to_numpy(np.float64)
 
-        rsi, avg_gain, avg_loss, close_p = _rsi(close, self._period_config)
+        rsi, avg_gain, avg_loss, close_p = _rsi(
+            close,
+            self._period_config,
+        )
 
         if self._memory:
             self._rsi = array("f", rsi)
 
+        self._avg_gain = avg_gain
+        self._avg_loss = avg_loss
+        self._close_p = close_p
+
         self.drop_data()
+
+    def update(self, data: pd.Series):
+        close = data["close"]
+
+        rsi, avg_gain, avg_loss = _rsi_update(
+            close,
+            self._close_p,
+            self._avg_gain,
+            self._avg_loss,
+            self.alpha,
+        )
+
+        if self._memory:
+            self._rsi.append(rsi)
+
+        self._avg_gain = avg_gain
+        self._avg_loss = avg_loss
+        self._close_p = close
 
     def rsi(self):
         return pd.Series(self._rsi)
