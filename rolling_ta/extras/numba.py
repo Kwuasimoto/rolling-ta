@@ -302,23 +302,24 @@ def _stoch_rsi(
 def _obv(
     close: np.ndarray[f8],
     volume: np.ndarray[f8],
+    obv_container: np.ndarray[f8],
 ) -> np.ndarray[f8]:
     n = close.size
-    obv = _empty(n, dtype=np.float64)
-    obv[0] = 0.0
 
     for i in nb.prange(1, n):
         curr_close = close[i]
         prev_close = close[i - 1]
 
         if curr_close > prev_close:
-            obv[i] = volume[i]
+            obv_container[i] = volume[i]
         elif curr_close < prev_close:
-            obv[i] = -volume[i]
+            obv_container[i] = -volume[i]
         else:
-            obv[i] = 0
+            obv_container[i] = 0
 
-    return _prefix_sum(obv)
+    obv = _prefix_sum(obv_container)
+
+    return obv, obv[-1], close[-1]
 
 
 @nb.njit(
