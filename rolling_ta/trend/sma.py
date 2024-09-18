@@ -1,3 +1,4 @@
+from array import array
 from typing import Deque
 from collections import deque
 
@@ -12,11 +13,7 @@ from rolling_ta.logging import logger
 
 
 class NumbaSMA(Indicator):
-    _sma: np.ndarray[np.float64]
     _sma_latest = np.nan
-
-    _window: Deque[np.float64]
-    _window_sum = np.nan
 
     def __init__(
         self,
@@ -32,33 +29,33 @@ class NumbaSMA(Indicator):
 
     def init(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
-        sma, current_sum = _sma(close, self._period_config)
 
-        self._window = deque(close[-self._period_config :], maxlen=self._period_config)
-        self._window_sum = current_sum
+        sma, window, window_sum, latest = _sma(close, self._period_config)
 
-        self._sma_latest = sma[-1]
+        self._window = window
+        self._window_sum = window_sum
+        self._sma_latest = latest
 
         if self._memory:
-            self._sma = sma
+            self._sma = array("f", sma)
 
         self.drop_data()
 
     def update(self, data: pd.Series):
-        close = data["close"]
-        close_f = self._window[0]
 
-        sma_latest, current_sum = _sma_update(
-            self._window_sum, close, close_f, self._period_config
+        latest, window, window_sum = _sma_update(
+            data["close"],
+            self._window_sum,
+            self._window,
+            self._period_config,
         )
 
-        self._sma_latest = sma_latest
-        self._window_sum = current_sum
-
-        self._window.append(close)
+        self._sma_latest = latest
+        self._window_sum = window_sum
+        self._window = window
 
         if self._memory:
-            self._sma = np.append(self._sma, self._sma_latest)
+            self._sma.append(latest)
 
     def sma(self):
         if not self._memory:

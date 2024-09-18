@@ -3,30 +3,70 @@ import numba as nb
 import numpy as np
 
 from numba.types import f8, f4, i4, i2, i8, b1
+import numba.types as ntypes
+import numba.typed as ntyped
+
+from rolling_ta.env import NUMBA_DISK_CACHING
+
 
 ## // HELPER FUNCTIONS \\
 ## Note: The outer njit function *supposedly* does not need to be supplied parallel=True.
 
 
-@nb.njit(parallel=True)
-def _shift(arr: np.ndarray[f8], shift: i8 = -1) -> np.ndarray[f8]:
-    shifted = np.empty(arr.size, dtype=np.float64)
-    for i in nb.prange(-shift, arr.size):
-        shifted[i] = arr[shift]
+@nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _shift(
+    arr: np.ndarray[f8],
+    shift: i4 = -1,
+    dtype: np.ndarray[f8] = np.float64,
+) -> np.ndarray[f8]:
+    n = arr.size
+
+    shifted = _empty(n, dtype=dtype)
+
+    if shift == 0:
+        raise ValueError("_shift: shift parameter cannot be 0")
+
+    if shift > 0:
+        for i in nb.prange(shift, n):
+            shifted[i] = arr[i - shift]
+        for i in nb.prange(shift):
+            shifted[i] = 0
+    else:
+        n_shift = n + shift
+
+        for i in nb.prange(n_shift):
+            shifted[i] = arr[i - shift]
+        for i in nb.prange(n_shift, n):
+            shifted[i] = 0
+
     return shifted
 
 
-@nb.njit(parallel=True, inline="always")
-def _prefix_sum(arr: np.ndarray[i4]) -> np.ndarray[f8]:
-    prefix_sum = np.empty(arr.shape, dtype=np.int32)
+@nb.njit(
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _prefix_sum(arr: np.ndarray[f8]) -> np.ndarray[f8]:
+    n = arr.size
+    prefix_sum = arr.copy()
     prefix_sum[0] = arr[0]
-    for i in nb.prange(1, arr.size):
+    for i in range(1, n):
         prefix_sum[i] = arr[i] + prefix_sum[i - 1]
-
     return prefix_sum
 
 
-@nb.njit(parallel=True, inline="always")
+@nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _mean(arr: np.ndarray[f8]) -> f8:
     n = arr.size
     sum: f8 = 0.0
@@ -35,17 +75,28 @@ def _mean(arr: np.ndarray[f8]) -> f8:
     return sum / n
 
 
-@nb.njit(parallel=True, inline="always")
+@nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _empty(
-    size: i8, fill_zeros: i8 = 0, dtype: np.dtype = np.float64
+    size: i4,
+    insert_n_zeros: i4 = 0,
+    dtype: np.dtype = np.float64,
 ) -> np.ndarray[f8]:
-    arr: np.ndarray[f8] = np.empty(size, dtype=dtype)
-    for i in nb.prange(fill_zeros):
+    arr = np.empty(size, dtype=dtype)
+    for i in nb.prange(insert_n_zeros):
         arr[i] = 0
     return arr
 
 
-@nb.njit(parallel=True, inline="always")
+@nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+)
 def _sliding_midpoint(
     high: np.ndarray[f8], low: np.ndarray[f8], period: i4
 ) -> np.ndarray:
@@ -70,35 +121,48 @@ def _sliding_midpoint(
 ## // INDICATOR FUNCTIONS \\
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _sma(
     data: np.ndarray[f8],
     period: i4 = 14,
-) -> tuple[np.ndarray[f8], f8]:
+) -> tuple[np.ndarray[f8], np.ndarray[f8], f8, f8]:
     sma: np.ndarray[f8] = _empty(data.size, period)
     current_sum: f8 = 0.0
     for i in nb.prange(period):
         current_sum += data[i]
     sma[period - 1] = current_sum / period
-    for i in range(period, data.shape[0]):
+    for i in range(period, data.size):
         current_sum += data[i] - data[i - period]
         sma[i] = current_sum / period
+    return sma, data[-period:], current_sum, sma[-1]
 
-    return sma, current_sum
 
-
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _sma_update(
-    window_sum: f8,
     close: f8,
-    close_f: f8,
+    window_sum: f8,
+    window: np.ndarray[f8],
     period: i4 = 14,
-) -> tuple[f8, f8]:
-    current_sum = (window_sum - close_f) + close
-    return current_sum / period, current_sum
+) -> tuple[np.ndarray[f8], f8, f8]:
+    first = window[0]
+    window = _shift(window)
+    window[-1] = close
+    window_sum = (window_sum - first) + close
+    return window_sum / period, window, window_sum
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _ema(
     data: np.ndarray[f8],
     weight: f8,
@@ -116,7 +180,10 @@ def _ema(
     return ema
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _ema_update(
     close: f8,
     weight: f8,
@@ -125,7 +192,11 @@ def _ema_update(
     return ((close - ema_latest) * weight) + ema_latest
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _obv(
     close: np.ndarray[f8],
     volume: np.ndarray[f8],
@@ -148,7 +219,10 @@ def _obv(
     return _prefix_sum(obv)
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _obv_update(
     close: f8,
     volume: f8,
@@ -162,7 +236,11 @@ def _obv_update(
     return obv_latest
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _mfi(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -212,7 +290,10 @@ def _mfi(
     return mfi, mfp[-period:], mfn[-period:], typical_price[-1]
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _mfi_update(high: f8, low: f8, close: f8, prev_typical: f8) -> tuple[f8, f8]:
 
     typical_price = (high + low + close) / 3
@@ -220,7 +301,11 @@ def _mfi_update(high: f8, low: f8, close: f8, prev_typical: f8) -> tuple[f8, f8]
     return 0, 0
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _tr(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -240,7 +325,10 @@ def _tr(
     return tr
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _tr_update(
     high: f8,
     low: f8,
@@ -249,7 +337,11 @@ def _tr_update(
     return max(high - low, abs(high - close_p), close_p - low)
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _atr(
     tr: np.ndarray[f8],
     period: i4 = 14,
@@ -262,7 +354,10 @@ def _atr(
     return atr
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _atr_update(
     atr_latest: f8,
     tr_current: f8,
@@ -272,7 +367,10 @@ def _atr_update(
     return ((atr_latest * n_1) + tr_current) / period
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dm(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -303,8 +401,10 @@ def _dm(
     return pdm, ndm, high[-1], low[-1]
 
 
-# OK
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dm_update(
     high: f8,
     low: f8,
@@ -323,7 +423,11 @@ def _dm_update(
     return pdm, ndm
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dm_smoothing(
     x: np.ndarray[f8],
     period: i4 = 14,
@@ -345,7 +449,10 @@ def _dm_smoothing(
     return s, s[-1]
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dm_smoothing_update(
     x: f8,
     s_p: f8,
@@ -354,7 +461,11 @@ def _dm_smoothing_update(
     return s_p - (s_p / period) + x
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dmi(
     dm: np.ndarray[f8],
     tr: np.ndarray[f8],
@@ -369,7 +480,10 @@ def _dmi(
     return dmi
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dmi_update(
     dm: f8,
     tr: f8,
@@ -377,7 +491,11 @@ def _dmi_update(
     return (dm / tr) * 100
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dx(
     pdmi: np.ndarray[f8],
     ndmi: np.ndarray[f8],
@@ -392,7 +510,10 @@ def _dx(
     return dx, dx[-1]
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _dx_update(
     pdmi: f8,
     ndmi: f8,
@@ -403,7 +524,11 @@ def _dx_update(
     return (abs(pdmi - ndmi) / (pdmi + ndmi)) * 100
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _adx(
     dx: np.ndarray[f8],
     adx_period: i4 = 14,
@@ -426,7 +551,10 @@ def _adx(
     return adx, adx[-1]
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _adx_update(
     dx: f8,
     adx_p: f8,
@@ -436,12 +564,17 @@ def _adx_update(
     return ((adx_p * n_1) + dx) / adx_period
 
 
-@nb.njit(parallel=True, inline="always")
+@nb.njit(
+    parallel=True,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _highs_lows(
     high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
 ) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
-    highs = np.empty(high.shape, dtype=np.float64)
-    lows = np.empty(low.shape, dtype=np.float64)
+    highs = _empty(high.size, period, dtype=np.float64)
+    lows = _empty(low.size, period, dtype=np.float64)
 
     for i in nb.prange(period, to_range):
         max_high = 0
@@ -457,7 +590,11 @@ def _highs_lows(
     return highs, lows
 
 
-@nb.njit(parallel=True)
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _ichimoku_cloud(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -486,6 +623,7 @@ def _ichimoku_cloud(
     kijun_lows = _empty(n, kijun_period, dtype=np.float64)
     senkou_highs = _empty(n, senkou_period, dtype=np.float64)
     senkou_lows = _empty(n, senkou_period, dtype=np.float64)
+
     tenkan = _empty(n, tenkan_period, dtype=np.float64)
     kijun = _empty(n, kijun_period, dtype=np.float64)
     senkou_a = _empty(n, senkou_period, dtype=np.float64)
@@ -522,7 +660,10 @@ def _ichimoku_cloud(
     )
 
 
-@nb.njit
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _ichimoku_cloud_update(
     high: np.ndarray[f8],
     next_high: f8,

@@ -1,3 +1,4 @@
+from array import array
 from rolling_ta.extras.numba import _obv, _obv_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
@@ -5,6 +6,50 @@ from typing import Union, Dict
 
 import pandas as pd
 import numpy as np
+
+
+class NumbaOBV(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[str, int] = {"ema": 20},
+        memory: bool = True,
+        retention: Union[int, None] = None,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        if self._init:
+            self.init()
+
+    def init(self):
+        close = self._data["close"].to_numpy(np.float64)
+        volume = self._data["volume"].to_numpy(np.float64)
+
+        obv = _obv(close, volume)
+
+        if self._memory:
+            self._obv = array("f", obv)
+
+        self._obv_latest = obv[-1]
+        self._close_p = close[-1]
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        close = data["close"]
+
+        self._obv_latest = _obv_update(
+            close, data["volume"], self._close_p, self._obv_latest
+        )
+
+        if self._memory:
+            self._obv.append(self._obv_latest)
+
+        self._close_p = close
+
+    def obv(self):
+        return pd.Series(self._obv)
 
 
 class OBV(Indicator):
@@ -67,48 +112,3 @@ class OBV(Indicator):
 
     def obv_latest(self):
         return self._obv_latest
-
-
-class NumbaOBV(Indicator):
-
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        period_config: Dict[str, int] = {"ema": 20},
-        memory: bool = True,
-        retention: Union[int, None] = None,
-        init: bool = True,
-    ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
-        if self._init:
-            self.init()
-
-    def init(self):
-        close = self._data["close"].to_numpy(np.float64)
-        volume = self._data["volume"].to_numpy(np.float64)
-
-        obv = _obv(close, volume)
-
-        # logger.info(f"NumbaOBV: [obv={obv[:]}]")
-
-        if self._memory:
-            self._obv = list(obv)
-
-        self._obv_latest = obv[-1]
-        self._close_p = close[-1]
-
-        self.drop_data()
-
-    def update(self, data: pd.Series):
-        close = data["close"]
-        volume = data["volume"]
-
-        self._obv_latest = _obv_update(close, volume, self._close_p, self._obv_latest)
-
-        if self._memory:
-            self._obv.append(self._obv_latest)
-
-        self._close_p = close
-
-    def obv(self):
-        return pd.Series(self._obv)

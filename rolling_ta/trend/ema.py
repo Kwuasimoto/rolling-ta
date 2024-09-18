@@ -1,9 +1,50 @@
+from array import array
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _ema, _ema_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
+
+
+class NumbaEMA(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: int = 14,
+        weight: np.float64 = 2.0,
+        memory: bool = True,
+        retention: int = 20000,
+        init: bool = True,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+        self._weight = weight / (period_config + 1)
+        if self._init:
+            self.init()
+
+    def init(self):
+
+        close = self._data["close"].to_numpy(dtype=np.float64)
+        ema = _ema(close, self._weight, self._period_config)
+
+        self._ema_latest = ema[-1]
+
+        if self._memory:
+            self._ema = array("f", ema)
+
+        self.drop_data()
+
+    def update(self, data: pd.Series):
+        self._ema_latest = _ema_update(data["close"], self._weight, self._ema_latest)
+
+        if self._memory:
+            self._ema = np.append(self._ema, self._ema_latest)
+
+    def ema(self):
+        if not self._memory:
+            raise MemoryError("NumbaEMA._memory = False")
+        return pd.Series(self._ema)
 
 
 class EMA(Indicator):
@@ -161,45 +202,3 @@ class EMA(Indicator):
             float: The most recent EMA value.
         """
         return self._ema_latest
-
-
-class NumbaEMA(Indicator):
-
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        period_config: int = 14,
-        weight: np.float64 = 2.0,
-        memory: bool = True,
-        retention: int = 20000,
-        init: bool = True,
-    ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
-        self._weight = weight / (period_config + 1)
-        if self._init:
-            self.init()
-
-    def init(self):
-
-        close = self._data["close"].to_numpy(dtype=np.float64)
-        ema = _ema(close, self._weight, self._period_config)
-
-        self._ema_latest = ema[-1]
-
-        if self._memory:
-            self._ema = ema
-
-        self.drop_data()
-
-    def update(self, data: pd.Series):
-
-        close = data["close"]
-        self._ema_latest = _ema_update(close, self._weight, self._ema_latest)
-
-        if self._memory:
-            self._ema = np.append(self._ema, self._ema_latest)
-
-    def ema(self):
-        if not self._memory:
-            raise MemoryError("NumbaEMA._memory = False")
-        return pd.Series(self._ema)

@@ -1,22 +1,29 @@
-import numpy as np
-
-from rolling_ta.extras.numba import _empty, _shift
-from rolling_ta.data import CSVLoader, XLSLoader
-from rolling_ta.logging import logger
-from ta.volume import OnBalanceVolumeIndicator
-from ta.trend import SMAIndicator
-
-from rolling_ta.trend.dmi import NumbaDMI
-from rolling_ta.volume import NumbaOBV
-from rolling_ta.numba_indicator import NumbaIndicator
-
 from time import time
 
-from numba import typed
-
-
 if __name__ == "__main__":
-    d = typed.Dict()
-    d["close"] = typed.List([1.0, 2.0])
-    n_indicator = NumbaIndicator(d, True)
-    n_indicator.drop_data()
+    pass
+    ## //--ARRAY/LIST SPEED TESTS--\\
+    # sample_size = 10_000_000
+
+    # np_sample = np.empty(sample_size)
+
+    # start = time()
+    # for i in range(1_000):
+    #     np_sample = np.append(np_sample, i)
+    # logger.info("TIMING: [{:,.20f}s]".format(time() - start))
+
+    # np_sample = None
+
+    # start = time()
+    # list_sample = [0] * sample_size
+    # # print(len(list_sample))
+    # for i in range(1_000):
+    #     list_sample.append(i)
+    # logger.info("TIMING: [{:,.20f}s]".format(time() - start))
+
+    # start = time()
+    # array_sample = array.array("f", list_sample)
+    # # print(len(array_sample))
+    # for i in range(1_000):
+    #     array_sample.append(i)
+    # logger.info("TIMING: [{:,.20f}s]".format(time() - start))
