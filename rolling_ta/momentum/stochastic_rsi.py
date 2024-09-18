@@ -7,6 +7,42 @@ from rolling_ta.momentum import RSI
 import pandas as pd
 
 
+class NumbaStochasticRSI(Indicator):
+
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[str, int] = {"rsi": 14, "stoch": 10, "k": 3, "d": 3},
+        memory: bool = True,
+        retention: Union[int | None] = 20000,
+        init: bool = True,
+        rsi: Union[RSI | None] = None,
+    ) -> None:
+        super().__init__(data, period_config, memory, retention, init)
+
+        self._rsi = (
+            RSI(data, period_config["rsi"], memory, retention, init)
+            if rsi is None
+            else rsi
+        )
+
+        self._stoch_period = self.period("stoch")
+        self._k_period = self.period("k")
+        self._d_period = self.period("d")
+
+        if self._init:
+            self.init()
+
+    def init(self):
+        return super().init()
+
+    def update(self, data: pd.Series):
+        return super().update(data)
+
+    def stoch_rsi(self):
+        return self._stoch_rsi
+
+
 class StochasticRSI(Indicator):
 
     def __init__(

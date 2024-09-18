@@ -220,6 +220,85 @@ def _ema_update(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
 )
+def _rsi(
+    close: np.ndarray[f8],
+    rsi_container: np.ndarray[f8],
+    gains_container: np.ndarray[f8],
+    losses_container: np.ndarray[f8],
+    period: i4 = 14,
+    p_1: i4 = 13,
+) -> tuple[np.ndarray[f8], f8, f8, f8]:
+    n = close.size
+
+    # Phase 1 (SMA)
+    for i in nb.prange(1, n):
+        delta = close[i] - close[i - 1]
+        if delta > 0:
+            gains_container[i] = delta
+        elif delta < 0:
+            losses_container[i] = -delta
+
+    avg_gain = _mean(gains_container[1 : period + 1])
+    avg_loss = _mean(losses_container[1 : period + 1])
+
+    rsi_container[period] = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    # Phase 2 (EMA)
+    for i in range(period + 1, n):
+        avg_gain = ((avg_gain * p_1) + gains_container[i]) / period
+        avg_loss = ((avg_loss * p_1) + losses_container[i]) / period
+        rsi_container[i] = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    return rsi_container, avg_gain, avg_loss, close[-1]
+
+
+@nb.njit(
+    cache=True,
+    fastmath=True,
+)
+def _rsi_update(
+    close: f8,
+    prev_close: f8,
+    avg_gain: f8,
+    avg_loss: f8,
+    p_1: f8 = 13,
+) -> tuple[f8, f8, f8]:
+    delta = close - prev_close
+
+    gain = max(delta, 0)
+    loss = -min(delta, 0)
+
+    avg_gain = p_1 * (gain - avg_gain) + avg_gain
+    avg_loss = p_1 * (loss - avg_loss) + avg_loss
+
+    rsi = (100 * avg_gain) / (avg_gain + avg_loss)
+
+    return rsi, avg_gain, avg_loss
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _stoch_rsi(
+    rsi: np.ndarray[f8],
+    window: np.ndarray[f8],
+    period: i4,
+) -> np.ndarray[f8]:
+    n = rsi.size
+    window = rsi[:period]
+    stoch_rsi = np.zeros(n, dtype=np.float64)
+
+    for i in nb.prange(period, n):
+        pass
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
 def _obv(
     close: np.ndarray[f8],
     volume: np.ndarray[f8],
@@ -585,62 +664,6 @@ def _adx_update(
     n_1: id = 13,
 ) -> f8:
     return ((adx_p * n_1) + dx) / adx_period
-
-
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
-def _rsi(
-    close: np.ndarray[f8], period: i4 = 14, p_1: i4 = 13
-) -> tuple[np.ndarray[f8], f8, f8, f8]:
-    n = close.size
-
-    rsi = _empty(n, period, dtype=np.float64)
-    gains = np.zeros(n, dtype=np.float64)
-    losses = np.zeros(n, dtype=np.float64)
-
-    # Phase 1 (SMA)
-    for i in nb.prange(1, n):
-        delta = close[i] - close[i - 1]
-        if delta > 0:
-            gains[i] = delta
-        elif delta < 0:
-            losses[i] = -delta
-
-    avg_gain = _mean(gains[1 : period + 1])
-    avg_loss = _mean(losses[1 : period + 1])
-
-    rsi[period] = (100 * avg_gain) / (avg_gain + avg_loss)
-
-    # Phase 2 (EMA)
-    for i in range(period + 1, n):
-        avg_gain = ((avg_gain * p_1) + gains[i]) / period
-        avg_loss = ((avg_loss * p_1) + losses[i]) / period
-        rsi[i] = (100 * avg_gain) / (avg_gain + avg_loss)
-
-    return rsi, avg_gain, avg_loss, close[-1]
-
-
-@nb.njit(
-    cache=True,
-    fastmath=True,
-)
-def _rsi_update(
-    close: f8,
-    prev_close: f8,
-    avg_gain: f8,
-    avg_loss: f8,
-    p_1: f8 = 13,
-) -> tuple[f8, f8, f8]:
-    delta = close - prev_close
-
-    gain = max(delta, 0)
-    loss = -min(delta, 0)
-
-    avg_gain = p_1 * (gain - avg_gain) + avg_gain
-    avg_loss = p_1 * (loss - avg_loss) + avg_loss
-
-    rsi = (100 * avg_gain) / (avg_gain + avg_loss)
-
-    return rsi, avg_gain, avg_loss
 
 
 @nb.njit(

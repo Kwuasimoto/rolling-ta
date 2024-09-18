@@ -36,9 +36,15 @@ class NumbaRSI(Indicator):
 
     def init(self):
         close = self._data["close"].to_numpy(np.float64)
+        rsi = np.zeros(close.size, dtype=np.float64)
+        gains = np.zeros(close.size, dtype=np.float64)
+        losses = np.zeros(close.size, dtype=np.float64)
 
         rsi, avg_gain, avg_loss, close_p = _rsi(
             close,
+            rsi,
+            gains,
+            losses,
             self._period_config,
         )
 

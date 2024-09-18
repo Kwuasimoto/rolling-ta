@@ -1,7 +1,7 @@
 import logging
 
 numba_logger = logging.getLogger("numba")
-numba_logger.setLevel(logging.INFO)
+numba_logger.setLevel(logging.DEBUG)
 
 logging.basicConfig(
     level=logging.DEBUG,
