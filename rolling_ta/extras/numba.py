@@ -588,8 +588,7 @@ def _adx_update(
 
 @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
 def _rsi(
-    close: np.ndarray[f8],
-    period: i4 = 14,
+    close: np.ndarray[f8], period: i4 = 14, p_1: i4 = 13
 ) -> tuple[np.ndarray[f8], f8, f8, f8]:
     n = close.size
 
@@ -612,8 +611,8 @@ def _rsi(
 
     # Phase 2 (EMA)
     for i in range(period + 1, n):
-        avg_gain = ((avg_gain * (period - 1)) + gains[i]) / period
-        avg_loss = ((avg_loss * (period - 1)) + losses[i]) / period
+        avg_gain = ((avg_gain * p_1) + gains[i]) / period
+        avg_loss = ((avg_loss * p_1) + losses[i]) / period
         rsi[i] = (100 * avg_gain) / (avg_gain + avg_loss)
 
     return rsi, avg_gain, avg_loss, close[-1]
