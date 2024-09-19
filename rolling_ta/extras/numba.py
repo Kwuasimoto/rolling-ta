@@ -8,10 +8,11 @@ import numba.types as ntypes
 import numba.typed as ntyped
 
 from rolling_ta.env import NUMBA_DISK_CACHING
-
+from rolling_ta.logging import logger
 
 ## // HELPER FUNCTIONS \\
 ## Note: The outer njit function *supposedly* does not need to be supplied parallel=True.
+logger.info(f"Cache [numba={NUMBA_DISK_CACHING}]")
 
 
 @nb.njit(
@@ -166,7 +167,11 @@ def _sma(
     return sma_container, data[-period:], current_sum, sma_container[-1]
 
 
-@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+    nogil=True,
+)
 def _sma_update(
     close: f8,
     window_sum: f8,
@@ -180,11 +185,7 @@ def _sma_update(
     return window_sum / period, window, window_sum
 
 
-@nb.njit(
-    parallel=True,
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _ema(
     data: np.ndarray[f8],
     ema_container: np.ndarray[f8],
@@ -205,6 +206,7 @@ def _ema(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _ema_update(
     close: f8,
@@ -218,6 +220,7 @@ def _ema_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _rsi(
     close: np.ndarray[f8],
@@ -252,8 +255,9 @@ def _rsi(
 
 
 @nb.njit(
-    cache=True,
+    cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _rsi_update(
     close: f8,
@@ -310,6 +314,7 @@ def _stoch_k(stoch_rsi: np.ndarray[f8], k_container: np.ndarray[f8], k_period: i
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _obv(
     close: np.ndarray[f8],
@@ -337,6 +342,7 @@ def _obv(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _obv_update(
     close: f8,
@@ -424,6 +430,7 @@ def _mfi_update(high: f8, low: f8, close: f8, prev_typical: f8) -> tuple[f8, f8]
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _tr(
     high: np.ndarray[f8],
@@ -450,6 +457,7 @@ def _tr(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _tr_update(
     high: f8,
@@ -463,6 +471,7 @@ def _tr_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _atr(
     tr: np.ndarray[f8],
@@ -479,6 +488,7 @@ def _atr(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _atr_update(
     atr_latest: f8,
@@ -492,6 +502,7 @@ def _atr_update(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dm(
     high: np.ndarray[f8],
@@ -527,6 +538,7 @@ def _dm(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dm_update(
     high: f8,
@@ -550,6 +562,7 @@ def _dm_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dm_smoothing(
     x: np.ndarray[f8],
@@ -576,6 +589,7 @@ def _dm_smoothing(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dm_smoothing_update(
     x: f8,
@@ -589,6 +603,7 @@ def _dm_smoothing_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dmi(
     dm: np.ndarray[f8],
@@ -608,6 +623,7 @@ def _dmi(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dmi_update(
     s_dm: f8,
@@ -620,6 +636,7 @@ def _dmi_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dx(
     pdmi: np.ndarray[f8],
@@ -641,6 +658,7 @@ def _dx(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _dx_update(
     pdmi: f8,
@@ -656,6 +674,7 @@ def _dx_update(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _adx(
     dx: np.ndarray[f8],
@@ -681,6 +700,7 @@ def _adx(
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _adx_update(
     dx: f8,
@@ -691,11 +711,7 @@ def _adx_update(
     return ((adx_p * n_1) + dx) / adx_period
 
 
-@nb.njit(
-    parallel=True,
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _tenkan(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -705,10 +721,7 @@ def _tenkan(
     _sliding_midpoint(high, low, tenkan_container, tenkan_period)
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _tenkan_update(
     high_container: np.ndarray[f8],
     low_container: np.ndarray[f8],
@@ -719,11 +732,7 @@ def _tenkan_update(
     ) * 0.5
 
 
-@nb.njit(
-    parallel=True,
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _kijun(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -733,10 +742,7 @@ def _kijun(
     _sliding_midpoint(high, low, kijun_container, kijun_period)
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _kijun_update(
     high_container: np.ndarray[f8],
     low_container: np.ndarray[f8],
@@ -747,11 +753,7 @@ def _kijun_update(
     ) * 0.5
 
 
-@nb.njit(
-    parallel=True,
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _senkou_b(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -762,10 +764,7 @@ def _senkou_b(
     senkou_b_container[: senkou_period - 1] = senkou_b_container[senkou_period - 1]
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _senkou_b_update(
     high_container: np.ndarray[f8],
     low_container: np.ndarray[f8],
@@ -776,11 +775,7 @@ def _senkou_b_update(
     ) * 0.5
 
 
-@nb.njit(
-    parallel=True,
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _senkou_a(
     tenkan: np.ndarray[f8],
     kijun: np.ndarray[f8],
@@ -794,10 +789,7 @@ def _senkou_a(
     senkou_a_container[:a_start] = senkou_a_container[a_start]
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _senkou_a_update(tenkan: f8, kijun: f8) -> f8:
     return (tenkan + kijun) * 0.5
 

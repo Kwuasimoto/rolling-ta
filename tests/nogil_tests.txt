@@ -1,0 +1,66 @@
+If section contain 2 lines (Like RSI), its the update function speed (divide by 9900 for true speed)
+
+SMA 
+WO/
+41.4 μs ± 592 ns per loop
+W/
+36.7 μs ± 1.3 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+
+EMA
+WO/
+47.2 μs ± 1.06 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+W/
+43 μs ± 937 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+
+
+RSI
+WO/
+97.2 μs ± 689 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+315 ms ± 5.67 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+W/
+89.3 μs ± 2.16 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+258 ms ± 5.92 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+
+OBV
+WO/
+51.4 μs ± 1.58 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+271 ms ± 4.68 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+W/
+50.9 μs ± 1.08 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+278 ms ± 12.8 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+TR
+WO/
+71.4 μs ± 1.26 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+283 ms ± 3.22 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+W/
+53.8 μs ± 1.07 μs per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+272 ms ± 5.25 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+ADX
+WO/
+751 μs ± 9.03 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+W/
+802 μs ± 94.9 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+
+ICHIMOKU
+WO/
+250 μs ± 3.24 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+11.9 ms ± 377 μs per loop (mean ± std. dev. of 7 runs, 100 loops each)
+W/
+244 μs ± 10.6 μs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+11.7 ms ± 340 μs per loop (mean ± std. dev. of 7 runs, 1 loop each)
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -41,6 +41,8 @@ class NumbaStochasticRSI(Indicator):
         stoch_rsi = np.zeros(rsi.size, dtype=np.float64)
         _stoch_rsi(rsi, window, stoch_rsi, self._stoch_period)
 
+        k = np.zeros()
+
     def update(self, data: pd.Series):
         return super().update(data)
 
