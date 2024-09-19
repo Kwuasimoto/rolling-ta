@@ -62,25 +62,6 @@ class NumbaIchimokuCloud(Indicator):
         senkou_a = np.zeros(high.size, dtype=np.float64)
         _senkou_a(tenkan, kijun, senkou_a, self._tenkan_period, self._kijun_period)
 
-        # (
-        #     tenkan,
-        #     kijun,
-        #     senkou_a,
-        #     senkou_b,
-        #     high_clip,
-        #     low_clip,
-        #     tenkan_latest,
-        #     kijun_latest,
-        #     senkou_a_latest,
-        #     senkou_b_latest,
-        # ) = _ichimoku_cloud(
-        #     high.copy(),
-        #     low.copy(),
-        #     self._tenkan_period,
-        #     self._kijun_period,
-        #     self._senkou_period,
-        # )
-
         if self._memory:
             self._tenkan = array("f", tenkan)
             self._kijun = array("f", kijun)

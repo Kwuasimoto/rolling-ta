@@ -2,8 +2,9 @@ from collections import deque
 from typing import Dict, Union
 
 import numpy as np
+from rolling_ta.extras.numba import _stoch_rsi
 from rolling_ta.indicator import Indicator
-from rolling_ta.momentum import RSI
+from rolling_ta.momentum import RSI, NumbaRSI
 import pandas as pd
 
 
@@ -16,12 +17,12 @@ class NumbaStochasticRSI(Indicator):
         memory: bool = True,
         retention: Union[int | None] = 20000,
         init: bool = True,
-        rsi: Union[RSI | None] = None,
+        rsi: Union[NumbaRSI | None] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 
         self._rsi = (
-            RSI(data, period_config["rsi"], memory, retention, init)
+            NumbaRSI(data, period_config["rsi"], memory, retention, init)
             if rsi is None
             else rsi
         )
@@ -34,7 +35,11 @@ class NumbaStochasticRSI(Indicator):
             self.init()
 
     def init(self):
-        return super().init()
+        rsi = self._rsi.rsi().to_numpy(dtype=np.float64)
+        window = np.empty(self._stoch_period, dtype=np.float64)
+
+        stoch_rsi = np.zeros(rsi.size, dtype=np.float64)
+        _stoch_rsi(rsi, window, stoch_rsi, self._stoch_period)
 
     def update(self, data: pd.Series):
         return super().update(data)

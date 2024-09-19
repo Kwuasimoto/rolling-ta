@@ -149,6 +149,7 @@ def _sliding_midpoint(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
+    nogil=True,
 )
 def _sma(
     data: np.ndarray[f8],
@@ -165,10 +166,7 @@ def _sma(
     return sma_container, data[-period:], current_sum, sma_container[-1]
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _sma_update(
     close: f8,
     window_sum: f8,
@@ -285,13 +283,26 @@ def _rsi_update(
 def _stoch_rsi(
     rsi: np.ndarray[f8],
     window: np.ndarray[f8],
+    stoch_rsi_container: np.ndarray[f8],
     period: i4,
-) -> np.ndarray[f8]:
+):
     n = rsi.size
-    window = rsi[:period]
-    stoch_rsi = np.zeros(n, dtype=np.float64)
+    window[:period] = rsi[:period]
 
     for i in nb.prange(period, n):
+        curr_rsi = rsi[i]
+        max_rsi = max(rsi[i - period : i])
+        min_rsi = min(rsi[i - period : i])
+        stoch_rsi_container[i] = (curr_rsi - min_rsi) / (max_rsi - min_rsi)
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _stoch_k(stoch_rsi: np.ndarray[f8], k_container: np.ndarray[f8], k_period: i4):
+    for i in nb.prange():
         pass
 
 
