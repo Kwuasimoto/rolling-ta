@@ -98,34 +98,17 @@ class NumbaIchimokuCloud(Indicator):
         self.drop_data()
 
     def update(self, data: pd.Series):
-        # self._high[:-1] = self._high[1:]
-        # self._high[-1] = data["high"]
+        self._high = np.roll(self._high, -1)
+        self._high[-1] = data["high"]
 
-        # self._low[:-1] = self._low[1:]
-        # self._low[-1] = data["low"]
+        self._low = np.roll(self._low, -1)
+        self._low[-1] = data["low"]
 
-        # tenkan = _tenkan_update(self._high, self._low, self._tenkan_period)
-        # kijun = _kijun_update(self._high, self._low, self._kijun_period)
-        # senkou_b = _senkou_b_update(self._high, self._low, self._senkou_period)
+        tenkan = _tenkan_update(self._high, self._low, self._tenkan_period)
+        kijun = _kijun_update(self._high, self._low, self._kijun_period)
+        senkou_b = _senkou_b_update(self._high, self._low, self._senkou_period)
 
-        # senkou_a = _senkou_a_update(tenkan, kijun)
-
-        (
-            tenkan,
-            kijun,
-            senkou_a,
-            senkou_b,
-            high,
-            low,
-        ) = _ichimoku_cloud_update(
-            self._high,
-            data["high"],
-            self._low,
-            data["low"],
-            self._tenkan_period,
-            self._kijun_period,
-            self._senkou_period,
-        )
+        senkou_a = _senkou_a_update(tenkan, kijun)
 
         if self._memory:
             self._tenkan.append(tenkan)
@@ -137,9 +120,6 @@ class NumbaIchimokuCloud(Indicator):
         self._kijun_latest = kijun
         self._senkou_a_latest = senkou_a
         self._senkou_b_latest = senkou_b
-
-        self._high = high
-        self._low = low
 
     def tenkan(self):
         return pd.Series(self._tenkan)
