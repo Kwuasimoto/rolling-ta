@@ -39,8 +39,19 @@ class NumbaADX(Indicator):
         pdmi = self._dmi.pdmi().to_numpy(np.float64)
         ndmi = self._dmi.ndmi().to_numpy(np.float64)
 
-        dx, dx_p = _dx(pdmi, ndmi, self._period_config)
-        adx, adx_p = _adx(dx, self._period_config, self._dmi._period_config)
+        dx, dx_p = _dx(
+            pdmi,
+            ndmi,
+            np.zeros(pdmi.size, dtype=np.float64),
+            self._period_config,
+        )
+        
+        adx, adx_p = _adx(
+            dx,
+            np.zeros(dx.size, dtype=np.float64),
+            self._period_config,
+            self._dmi._period_config,
+        )
 
         if self._memory:
             self._adx = array("f", adx)

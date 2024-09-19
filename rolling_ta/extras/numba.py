@@ -612,18 +612,18 @@ def _dmi_update(
 def _dx(
     pdmi: np.ndarray[f8],
     ndmi: np.ndarray[f8],
+    dx_container: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f8], f8]:
     n = pdmi.size
-    dx = _empty(n, period, dtype=np.float64)
 
     for i in nb.prange(period, n):
         if pdmi[i] + ndmi[i] != 0:
-            dx[i] = (abs(pdmi[i] - ndmi[i]) / (pdmi[i] + ndmi[i])) * 100
+            dx_container[i] = (abs(pdmi[i] - ndmi[i]) / (pdmi[i] + ndmi[i])) * 100
         else:
-            dx[i] = 0
+            dx_container[i] = 0
 
-    return dx, dx[-1]
+    return dx_container, dx_container[-1]
 
 
 @nb.njit(
@@ -647,24 +647,23 @@ def _dx_update(
 )
 def _adx(
     dx: np.ndarray[f8],
+    adx_container: np.ndarray[f8],
     adx_period: i4 = 14,
     dmi_period: i4 = 14,
 ) -> tuple[np.ndarray[f8], f8]:
     pp: i4 = adx_period + dmi_period
     weight: i4 = adx_period - 1
-
-    adx: np.ndarray[f8] = _empty(dx.size, pp, dtype=np.float64)
     adx_0: f8 = 0.0
 
     for i in nb.prange(adx_period, pp):
         adx_0 += dx[i]
 
-    adx[pp - 1] = adx_0 / adx_period
+    adx_container[pp - 1] = adx_0 / adx_period
 
-    for i in range(pp, adx.size):
-        adx[i] = ((adx[i - 1] * weight) + dx[i]) / adx_period
+    for i in range(pp, adx_container.size):
+        adx_container[i] = ((adx_container[i - 1] * weight) + dx[i]) / adx_period
 
-    return adx, adx[-1]
+    return adx_container, adx_container[-1]
 
 
 @nb.njit(
