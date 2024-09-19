@@ -36,7 +36,7 @@ class NumbaTrueRange(Indicator):
 
         # If memory set, convert to array
         if self._memory:
-            self._tr = array("f", tr)
+            self._tr = array("d", tr)
 
         self._tr_latest = tr_latest
         self._close_p = close_p

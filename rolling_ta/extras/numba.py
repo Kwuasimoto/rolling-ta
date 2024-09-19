@@ -454,14 +454,14 @@ def _tr_update(
 )
 def _atr(
     tr: np.ndarray[f8],
+    atr_container: np.ndarray[f8],
     period: i4 = 14,
     n_1: i4 = 13,
 ) -> tuple[np.ndarray[f8], f8]:
-    atr = _empty(tr.size, period, dtype=np.float64)
-    atr[period - 1] = _mean(tr[:period])
+    atr_container[period - 1] = _mean(tr[:period])
     for i in range(period, tr.size):
-        atr[i] = ((atr[i - 1] * n_1) + tr[i]) / period
-    return atr, atr[-1]
+        atr_container[i] = ((atr_container[i - 1] * n_1) + tr[i]) / period
+    return atr_container, atr_container[-1]
 
 
 @nb.njit(
@@ -511,6 +511,7 @@ def _dm(
     return pdm, ndm, high[-1], low[-1]
 
 
+# OK
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
@@ -545,30 +546,31 @@ def _dm_smoothing(
     # According to: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
     # The initial TrueRange value (ex: high - low) is not a valid True Range, so we start at period + 1
     p_1 = period + 1
-    s = _empty(x.size, period, dtype=np.float64)
+    s_x = _empty(x.size, period, dtype=np.float64)
     x_sum: i8 = 0
 
     for i in nb.prange(1, p_1):
         x_sum += x[i]
-    s[period] = x_sum
+    s_x[period] = x_sum
 
     for i in range(p_1, x.size):
-        s_p = s[i - 1]
-        s[i] = s_p - (s_p / period) + x[i]
+        s_x_p = s_x[i - 1]
+        s_x[i] = s_x_p - (s_x_p / period) + x[i]
 
-    return s, s[-1]
+    return s_x, s_x[-1]
 
 
+# OK
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
 )
 def _dm_smoothing_update(
     x: f8,
-    s_p: f8,
+    s_x_p: f8,
     period: i4 = 14,
 ) -> f8:
-    return s_p - (s_p / period) + x
+    return s_x_p - (s_x_p / period) + x
 
 
 @nb.njit(
@@ -580,25 +582,26 @@ def _dmi(
     dm: np.ndarray[f8],
     tr: np.ndarray[f8],
     period: i4 = 14,
-) -> np.ndarray[f8]:
+) -> tuple[np.ndarray[f8], f8]:
     n = dm.size
     dmi = _empty(dm.size, period, dtype=np.float64)
 
     for i in nb.prange(period, n):
         dmi[i] = (dm[i] / tr[i]) * 100
 
-    return dmi
+    return dmi, dmi[-1]
 
 
+# OK
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
     fastmath=True,
 )
 def _dmi_update(
-    dm: f8,
-    tr: f8,
+    s_dm: f8,
+    s_tr: f8,
 ) -> f8:
-    return (dm / tr) * 100
+    return (s_dm / s_tr) * 100
 
 
 @nb.njit(

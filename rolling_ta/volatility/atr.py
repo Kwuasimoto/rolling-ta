@@ -32,8 +32,12 @@ class NumbaAverageTrueRange(Indicator):
         if not self._init:
             self._tr.init()
 
+        tr = self._tr.tr().to_numpy(dtype=np.float64)
+        atr = np.zeros(tr.size, dtype=np.float64)
+
         self._atr, latest = _atr(
-            self._tr.tr().to_numpy(np.float64),
+            tr,
+            atr,
             self._period_config,
             self._n_1,
         )
@@ -41,7 +45,7 @@ class NumbaAverageTrueRange(Indicator):
         self._atr_latest = latest
 
         if self._memory:
-            self._atr = array("f", self._atr)
+            self._atr = array("d", self._atr)
 
         self.drop_data()
 
