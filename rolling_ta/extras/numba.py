@@ -484,20 +484,20 @@ def _atr_update(
 def _dm(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
+    high_p_container: np.ndarray[f8],
+    low_p_container: np.ndarray[f8],
 ) -> tuple[np.ndarray[f8], np.ndarray[f8], f8, f8]:
-    high_p = _empty(high.size, dtype=np.float64)
-    high_p[1:] = high[:-1]
 
-    low_p = _empty(low.size, dtype=np.float64)
-    low_p[1:] = low[:-1]
+    high_p_container[1:] = high[:-1]
+    low_p_container[1:] = low[:-1]
 
     high[0] = 0.0
     low[0] = 0.0
-    high_p[0] = 0.0
-    low_p[0] = 0.0
+    high_p_container[0] = 0.0
+    low_p_container[0] = 0.0
 
-    move_up = high - high_p
-    move_down = low_p - low
+    move_up = high - high_p_container
+    move_down = low_p_container - low
 
     move_up_mask = (move_up > 0) & (move_up > move_down)
     move_down_mask = (move_down > 0) & (move_down > move_up)
@@ -541,23 +541,23 @@ def _dm_update(
 )
 def _dm_smoothing(
     x: np.ndarray[f8],
+    s_x_container: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f8], f8]:
     # According to: https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/average-directional-index-adx
     # The initial TrueRange value (ex: high - low) is not a valid True Range, so we start at period + 1
     p_1 = period + 1
-    s_x = _empty(x.size, period, dtype=np.float64)
     x_sum: i8 = 0
 
     for i in nb.prange(1, p_1):
         x_sum += x[i]
-    s_x[period] = x_sum
+    s_x_container[period] = x_sum
 
     for i in range(p_1, x.size):
-        s_x_p = s_x[i - 1]
-        s_x[i] = s_x_p - (s_x_p / period) + x[i]
+        s_x_p = s_x_container[i - 1]
+        s_x_container[i] = s_x_p - (s_x_p / period) + x[i]
 
-    return s_x, s_x[-1]
+    return s_x_container, s_x_container[-1]
 
 
 # OK
@@ -618,7 +618,10 @@ def _dx(
     dx = _empty(n, period, dtype=np.float64)
 
     for i in nb.prange(period, n):
-        dx[i] = (abs(pdmi[i] - ndmi[i]) / (pdmi[i] + ndmi[i])) * 100
+        if pdmi[i] + ndmi[i] != 0:
+            dx[i] = (abs(pdmi[i] - ndmi[i]) / (pdmi[i] + ndmi[i])) * 100
+        else:
+            dx[i] = 0
 
     return dx, dx[-1]
 

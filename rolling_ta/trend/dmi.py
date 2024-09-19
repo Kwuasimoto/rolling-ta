@@ -44,11 +44,23 @@ class NumbaDMI(Indicator):
         tr = self._tr.tr().to_numpy(np.float64)
 
         # pdm, ndm, pdm[-1], ndm[-1], high[-1], low[-1]
-        pdm, ndm, high_p, low_p = _dm(high, low)
 
-        s_tr, self._s_tr_p = _dm_smoothing(tr, self._period_config)
-        s_pdm, self._s_pdm_p = _dm_smoothing(pdm, self._period_config)
-        s_ndm, self._s_ndm_p = _dm_smoothing(ndm, self._period_config)
+        pdm, ndm, high_p, low_p = _dm(
+            high,
+            low,
+            np.zeros(high.size, dtype=np.float64),
+            np.zeros(low.size, dtype=np.float64),
+        )
+
+        s_tr, self._s_tr_p = _dm_smoothing(
+            tr, np.zeros(tr.size, dtype=np.float64), self._period_config
+        )
+        s_pdm, self._s_pdm_p = _dm_smoothing(
+            pdm, np.zeros(pdm.size, dtype=np.float64), self._period_config
+        )
+        s_ndm, self._s_ndm_p = _dm_smoothing(
+            ndm, np.zeros(ndm.size, dtype=np.float64), self._period_config
+        )
 
         self._pdmi, self._pdmi_p = _dmi(s_pdm, s_tr, self._period_config)
         self._ndmi, self._ndmi_p = _dmi(s_ndm, s_tr, self._period_config)
