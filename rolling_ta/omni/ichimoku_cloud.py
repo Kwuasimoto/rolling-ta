@@ -2,7 +2,19 @@ from array import array
 from typing import Dict, Union
 import numpy as np
 import pandas as pd
-from rolling_ta.extras.numba import _ichimoku_cloud, _ichimoku_cloud_update
+from rolling_ta.extras.numba import (
+    _ichimoku_cloud,
+    _ichimoku_cloud_update,
+    _kijun,
+    _kijun_update,
+    _senkou_a,
+    _senkou_a_update,
+    _senkou_b,
+    _senkou_b_update,
+    _shift,
+    _tenkan,
+    _tenkan_update,
+)
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
 from collections import deque
@@ -29,6 +41,7 @@ class NumbaIchimokuCloud(Indicator):
         self._tenkan_period = self.period("tenkan")
         self._kijun_period = self.period("kijun")
         self._senkou_period = self.period("senkou")
+        self._clip = max(self._tenkan_period, self._kijun_period, self._senkou_period)
 
         if self._init:
             self.init()
@@ -37,24 +50,36 @@ class NumbaIchimokuCloud(Indicator):
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
 
-        (
-            tenkan,
-            kijun,
-            senkou_a,
-            senkou_b,
-            high_clip,
-            low_clip,
-            tenkan_latest,
-            kijun_latest,
-            senkou_a_latest,
-            senkou_b_latest,
-        ) = _ichimoku_cloud(
-            high.copy(),
-            low.copy(),
-            self._tenkan_period,
-            self._kijun_period,
-            self._senkou_period,
-        )
+        tenkan = np.zeros(high.size, dtype=np.float64)
+        _tenkan(high, low, tenkan, self._tenkan_period)
+
+        kijun = np.zeros(high.size, dtype=np.float64)
+        _kijun(high, low, kijun, self._kijun_period)
+
+        senkou_b = np.zeros(high.size, dtype=np.float64)
+        _senkou_b(high, low, senkou_b, self._senkou_period)
+
+        senkou_a = np.zeros(high.size, dtype=np.float64)
+        _senkou_a(tenkan, kijun, senkou_a, self._tenkan_period, self._kijun_period)
+
+        # (
+        #     tenkan,
+        #     kijun,
+        #     senkou_a,
+        #     senkou_b,
+        #     high_clip,
+        #     low_clip,
+        #     tenkan_latest,
+        #     kijun_latest,
+        #     senkou_a_latest,
+        #     senkou_b_latest,
+        # ) = _ichimoku_cloud(
+        #     high.copy(),
+        #     low.copy(),
+        #     self._tenkan_period,
+        #     self._kijun_period,
+        #     self._senkou_period,
+        # )
 
         if self._memory:
             self._tenkan = array("f", tenkan)
@@ -62,20 +87,28 @@ class NumbaIchimokuCloud(Indicator):
             self._senkou_a = array("f", senkou_a)
             self._senkou_b = array("f", senkou_b)
 
-        self._tenkan_latest = tenkan_latest
-        self._kijun_latest = kijun_latest
-        self._senkou_a_latest = senkou_a_latest
-        self._senkou_b_latest = senkou_b_latest
+        self._tenkan_latest = tenkan[-1]
+        self._kijun_latest = kijun[-1]
+        self._senkou_a_latest = senkou_a[-1]
+        self._senkou_b_latest = senkou_b[-1]
 
-        # Store related information for required updates
-        self._high = high_clip
-        self._low = low_clip
+        self._high = high[-self._clip :]
+        self._low = low[-self._clip :]
 
         self.drop_data()
 
     def update(self, data: pd.Series):
-        high = data["high"]
-        low = data["low"]
+        # self._high[:-1] = self._high[1:]
+        # self._high[-1] = data["high"]
+
+        # self._low[:-1] = self._low[1:]
+        # self._low[-1] = data["low"]
+
+        # tenkan = _tenkan_update(self._high, self._low, self._tenkan_period)
+        # kijun = _kijun_update(self._high, self._low, self._kijun_period)
+        # senkou_b = _senkou_b_update(self._high, self._low, self._senkou_period)
+
+        # senkou_a = _senkou_a_update(tenkan, kijun)
 
         (
             tenkan,
@@ -86,9 +119,9 @@ class NumbaIchimokuCloud(Indicator):
             low,
         ) = _ichimoku_cloud_update(
             self._high,
-            high,
+            data["high"],
             self._low,
-            low,
+            data["low"],
             self._tenkan_period,
             self._kijun_period,
             self._senkou_period,
@@ -109,25 +142,25 @@ class NumbaIchimokuCloud(Indicator):
         self._low = low
 
     def tenkan(self):
-        return np.array(self._tenkan)
+        return pd.Series(self._tenkan)
 
     def tenkan_latest(self):
         return self._tenkan_latest
 
     def kijun(self):
-        return np.array(self._kijun)
+        return pd.Series(self._kijun)
 
     def kijun_latest(self):
         return self._kijun_latest
 
     def senkou_a(self):
-        return np.array(self._senkou_a)
+        return pd.Series(self._senkou_a)
 
     def senkou_a_latest(self):
         return self._senkou_a_latest
 
     def senkou_b(self):
-        return np.array(self._senkou_b)
+        return pd.Series(self._senkou_b)
 
     def senkou_b_latest(self):
         return self._senkou_b_latest

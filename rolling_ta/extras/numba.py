@@ -55,19 +55,20 @@ def _shift(
     fastmath=True,
 )
 def _highs_lows(
-    high: np.ndarray[f8], low: np.ndarray[f8], period: i4, to_range: i4
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    highs_container: np.ndarray[f8],
+    lows_container: np.ndarray[f8],
+    period: i4,
+    to_range: i4,
 ) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
     n = high.shape[0]
-    highs = _empty(n, period, dtype=np.float64)  # Initialize all values to zero
-    lows = _empty(n, period, dtype=np.float64)  # Initialize lows to infinity
 
     for i in nb.prange(period, to_range):
         max_high = np.max(high[i - period : i])  # Use vectorized np.max
         min_low = np.min(low[i - period : i])  # Use vectorized np.min
-        highs[i - 1] = max_high
-        lows[i - 1] = min_low
-
-    return highs, lows
+        highs_container[i - 1] = max_high
+        lows_container[i - 1] = min_low
 
 
 @nb.njit(
@@ -121,13 +122,15 @@ def _empty(
     cache=NUMBA_DISK_CACHING,
 )
 def _sliding_midpoint(
-    high: np.ndarray[f8], low: np.ndarray[f8], period: i4
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    x_container: np.ndarray[f8],
+    period: i4,
 ) -> np.ndarray:
     n: i8 = high.size
-    arr: np.ndarray[f8] = _empty(n, period, dtype=np.float64)
 
     for i in nb.prange(period - 1, n):
-        max_val: f8 = 0.0
+        max_val: f8 = -np.inf
         min_val: f8 = np.inf
 
         for j in range(i - period + 1, i + 1):
@@ -136,9 +139,7 @@ def _sliding_midpoint(
             if low[j] < min_val:
                 min_val = low[j]
 
-        arr[i] = (max_val + min_val) * 0.5
-
-    return arr
+        x_container[i] = (max_val + min_val) * 0.5
 
 
 ## // INDICATOR FUNCTIONS \\
@@ -581,15 +582,15 @@ def _dm_smoothing_update(
 def _dmi(
     dm: np.ndarray[f8],
     tr: np.ndarray[f8],
+    dmi_container: np.ndarray[f8],
     period: i4 = 14,
 ) -> tuple[np.ndarray[f8], f8]:
     n = dm.size
-    dmi = _empty(dm.size, period, dtype=np.float64)
 
     for i in nb.prange(period, n):
-        dmi[i] = (dm[i] / tr[i]) * 100
+        dmi_container[i] = (dm[i] / tr[i]) * 100
 
-    return dmi, dmi[-1]
+    return dmi_container, dmi_container[-1]
 
 
 # OK
@@ -677,6 +678,117 @@ def _adx_update(
     n_1: id = 13,
 ) -> f8:
     return ((adx_p * n_1) + dx) / adx_period
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _tenkan(
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    tenkan_container: np.ndarray[f8],
+    tenkan_period: f8,
+):
+    _sliding_midpoint(high, low, tenkan_container, tenkan_period)
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _tenkan_update(
+    high_container: np.ndarray[f8],
+    low_container: np.ndarray[f8],
+    tenkan_period: i8,
+) -> f8:
+    return (
+        max(high_container[-tenkan_period:]) + min(low_container[-tenkan_period:])
+    ) * 0.5
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _kijun(
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    kijun_container: np.ndarray[f8],
+    kijun_period: f8,
+):
+    _sliding_midpoint(high, low, kijun_container, kijun_period)
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _kijun_update(
+    high_container: np.ndarray[f8],
+    low_container: np.ndarray[f8],
+    kijun_period: i8,
+) -> f8:
+    return (
+        max(high_container[-kijun_period:]) + min(low_container[-kijun_period:])
+    ) * 0.5
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _senkou_b(
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    senkou_b_container: np.ndarray[f8],
+    senkou_period: f8,
+):
+    _sliding_midpoint(high, low, senkou_b_container, senkou_period)
+    senkou_b_container[: senkou_period - 1] = senkou_b_container[senkou_period - 1]
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _senkou_b_update(
+    high_container: np.ndarray[f8],
+    low_container: np.ndarray[f8],
+    senkou_period: i8,
+) -> f8:
+    return (
+        max(high_container[-senkou_period:]) + min(low_container[-senkou_period:])
+    ) * 0.5
+
+
+@nb.njit(
+    parallel=True,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _senkou_a(
+    tenkan: np.ndarray[f8],
+    kijun: np.ndarray[f8],
+    senkou_a_container: np.ndarray[f8],
+    tenkan_period: f8,
+    kijun_period: f8,
+):
+    a_start = max(tenkan_period, kijun_period) - 1
+    for i in nb.prange(a_start, tenkan.size):
+        senkou_a_container[i] = (tenkan[i] + kijun[i]) * 0.5
+    senkou_a_container[:a_start] = senkou_a_container[a_start]
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    fastmath=True,
+)
+def _senkou_a_update(tenkan: f8, kijun: f8) -> f8:
+    return (tenkan + kijun) * 0.5
 
 
 @nb.njit(

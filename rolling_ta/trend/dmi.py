@@ -62,8 +62,12 @@ class NumbaDMI(Indicator):
             ndm, np.zeros(ndm.size, dtype=np.float64), self._period_config
         )
 
-        self._pdmi, self._pdmi_p = _dmi(s_pdm, s_tr, self._period_config)
-        self._ndmi, self._ndmi_p = _dmi(s_ndm, s_tr, self._period_config)
+        self._pdmi, self._pdmi_p = _dmi(
+            s_pdm, s_tr, np.zeros(s_pdm.size, dtype=np.float64), self._period_config
+        )
+        self._ndmi, self._ndmi_p = _dmi(
+            s_ndm, s_tr, np.zeros(s_ndm.size, dtype=np.float64), self._period_config
+        )
 
         self._high_p = high_p
         self._low_p = low_p
