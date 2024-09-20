@@ -1,14 +1,18 @@
 from array import array
 from pandas import DataFrame
-from rolling_ta.extras.numba import _mfi
+from rolling_ta.extras.numba import (
+    _mf_pos_neg,
+    _mf_pos_neg_sum,
+    _rmf,
+    _typical_price,
+    _mfi,
+)
+
 from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
 import pandas as pd
 import numpy as np
 
 from collections import deque
-
-from typing import Deque, Dict
 
 
 class NumbaMFI(Indicator):
@@ -41,26 +45,24 @@ class NumbaMFI(Indicator):
         volume = self._data["volume"].copy().to_numpy(np.float64)
 
         typical_price = np.zeros(volume.size, dtype=np.float64)
-        mfp = np.zeros(volume.size, dtype=np.float64)
-        mfn = np.zeros(volume.size, dtype=np.float64)
-        mfi = np.zeros(volume.size, dtype=np.float64)
+        _typical_price(high, low, close, typical_price)
 
-        mfi, mfp, mfn, prev_typical = _mfi(
-            high,
-            low,
-            close,
-            volume,
-            typical_price,
-            mfp,
-            mfn,
-            mfi,
-            self._period_config,
-        )
+        rmf = np.zeros(volume.size, dtype=np.float64)
+        _rmf(typical_price, volume, rmf)
+
+        pmf = np.zeros(volume.size, dtype=np.float64)
+        nmf = np.zeros(volume.size, dtype=np.float64)
+        _mf_pos_neg(typical_price, rmf, pmf, nmf)
+
+        pmf_sums = np.zeros(volume.size, dtype=np.float64)
+        nmf_sums = np.zeros(volume.size, dtype=np.float64)
+        _mf_pos_neg_sum(pmf, nmf, pmf_sums, nmf_sums, self._period_config)
+
+        mfi = np.zeros(volume.size, dtype=np.float64)
+        _mfi(pmf_sums, nmf_sums, mfi, self._period_config)
 
         if self._memory:
             self._mfi = array("f", mfi)
-
-        self._prev_typical = prev_typical
 
         self.drop_data()
 

@@ -9,16 +9,12 @@ from tests.fixtures.eval import Eval
 from rolling_ta.logging import logger
 
 
-# def test_numba_mfi(btc_df: pd.DataFrame, evaluate: Eval):
-#     expected = MFIIndicator(
-#         btc_df["high"], btc_df["low"], btc_df["close"], btc_df["volume"]
+# def test_numba_mfi(mfi_df: pd.DataFrame, evaluate: Eval):
+#     evaluate(
+#         mfi_df["mfi"].to_numpy(dtype=np.float64),
+#         NumbaMFI(mfi_df).mfi().to_numpy(dtype=np.float64),
+#         name="NUMBA_MFI",
 #     )
-#     expected_mfi = expected.money_flow_index().fillna(0).to_numpy(np.float64).round(4)
-
-#     rolling = NumbaMFI(btc_df)
-#     rolling_mfi = rolling.mfi().fillna(0).to_numpy(np.float64).round(4)
-
-#     evaluate(rolling_mfi, expected_mfi)
 
 
 # def test_numba_mfi_update(btc_df: pd.DataFrame, evaluate: Eval):

@@ -5,6 +5,7 @@ from rolling_ta.momentum import NumbaStochasticRSI, NumbaRSI
 from ta.momentum import StochRSIIndicator, RSIIndicator
 from rolling_ta.logging import logger
 from rolling_ta.volatility.tr import NumbaTrueRange
+from rolling_ta.volume.mfi import NumbaMFI
 
 if __name__ == "__main__":
     # logger.info(not np.isclose(1.000999, 1.000119, atol=1e-6))
@@ -12,24 +13,32 @@ if __name__ == "__main__":
     # btc = loader.read_resource()
 
     loader = XLSXLoader()
-    atr_df = loader.read_resource(
-        "btc-atr.xlsx",
+    mfi_df = loader.read_resource(
+        "btc-mfi.xlsx",
         columns=[
             "ts",
             "high",
             "low",
             "close",
-            "tr",
-            "atr",
+            "typical",
+            "volume",
+            "rmf",
+            "pmf",
+            "nmf",
+            "pmf_sum_14",
+            "nmf_sum_14",
+            "mfi",
         ],
     ).copy()
 
-    tr = NumbaTrueRange(atr_df.iloc[:40])
+    mfi = NumbaMFI(mfi_df.iloc[:40])
 
-    slice_b = atr_df.iloc[40:]
+    logger.info(mfi.mfi())
 
-    for i, series in slice_b.iterrows():
-        tr.update(series)
+    # slice_b = mfi_df.iloc[40:]
+
+    # for i, series in slice_b.iterrows():
+    #     mfi.update(series)
 
     # writer = XLSXWriter("btc-sma.xlsx")
 

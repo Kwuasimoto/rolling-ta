@@ -22,9 +22,7 @@ def _highs_lows(
     lows_container: np.ndarray[f8],
     period: i4,
     to_range: i4,
-) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
-    n = high.shape[0]
-
+):
     for i in nb.prange(period, to_range):
         max_high = np.max(high[i - period : i])  # Use vectorized np.max
         min_low = np.min(low[i - period : i])  # Use vectorized np.min
@@ -58,7 +56,7 @@ def _mean(arr: np.ndarray[f8]) -> f8:
 )
 def _sliding_midpoint(
     high: np.ndarray[f8], low: np.ndarray[f8], x_container: np.ndarray[f8], period: i4
-) -> np.ndarray:
+):
     n: i8 = high.size
 
     for i in nb.prange(period - 1, n):
@@ -72,6 +70,17 @@ def _sliding_midpoint(
                 min_val = low[j]
 
         x_container[i] = (max_val + min_val) * 0.5
+
+
+@nb.njit(parallel=True, inline="always", cache=NUMBA_DISK_CACHING, fastmath=True)
+def _typical_price(
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    close: np.ndarray[f8],
+    typical_price_container: np.ndarray[f8],
+):
+    for i in nb.prange(typical_price_container.size):
+        typical_price_container[i] = (high[i] + low[i] + close[i]) / 3
 
 
 ## // INDICATOR FUNCTIONS \\
@@ -233,68 +242,60 @@ def _obv_update(close: f8, volume: f8, close_p: f8, obv_latest: f8) -> f8:
 
 
 @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
-def _mfi(
-    high: np.ndarray[f8],
-    low: np.ndarray[f8],
-    close: np.ndarray[f8],
-    volume: np.ndarray[f8],
-    typical_price_container: np.ndarray[f8],
-    mfp_container: np.ndarray[f8],
-    mfn_container: np.ndarray[f8],
-    mfi_container: np.ndarray[f8],
-    period: i4 = 14,
-) -> tuple[np.ndarray[f4], np.ndarray[f8], np.ndarray[f8], f8]:
-    # MFI should be between 0 and 100, which is f2 compatible.
-    n = close.size
+def _rmf(price: np.ndarray[f8], volume: np.ndarray[f8], rmf_container: np.ndarray[f8]):
+    for i in nb.prange(price.size):
+        rmf_container[i] = price[i] * volume[i]
 
-    for i in nb.prange(n):
-        typical_price_container[i] = (high[i] + low[i] + close[i]) / 3
 
-    for i in nb.prange(1, n):
-        curr_typical = typical_price_container[i]
-        prev_typical = typical_price_container[i - 1]
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+def _mf_pos_neg(
+    price: np.ndarray[f8],
+    rmf: np.ndarray[f8],
+    pmf_container: np.ndarray[f8],
+    nmf_container: np.ndarray[f8],
+):
+    for i in nb.prange(1, price.size):
+        curr_typical = price[i]
+        prev_typical = price[i - 1]
 
         if curr_typical > prev_typical:
-            mfp_container[i] = curr_typical * volume[i]
+            pmf_container[i] = rmf[i]
         elif curr_typical < prev_typical:
-            mfn_container[i] = curr_typical * volume[i]
-
-    n = close.size
-    for i in nb.prange(0, n - period + 1):
-        i_p = i + period - 1
-        mfp_sum = 0.0
-        mfn_sum = 0.0
-
-        for j in nb.prange(i, i + period):
-            if mfp_container[j] > 0:
-                mfp_sum += mfp_container[j]
-            elif mfn_container[j] > 0:
-                mfn_sum += mfn_container[j]
-
-        if mfp_sum == 0:
-            mfi_container[i_p] = 0
-        elif mfn_sum == 0:
-            mfi_container[i_p] = 100
-        else:
-            mfi_container[i_p] = (100 * mfp_sum) / (mfp_sum + mfn_sum)
-
-    return (
-        mfi_container,
-        mfp_container[-period:],
-        mfn_container[-period:],
-        typical_price_container[-1],
-    )
+            nmf_container[i] = rmf[i]
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-)
-def _mfi_update(high: f8, low: f8, close: f8, prev_typical: f8) -> tuple[f8, f8]:
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+def _mf_pos_neg_sum(
+    pmf: np.ndarray[f8],
+    nmf: np.ndarray[f8],
+    pmf_sum_container: np.ndarray[f8],
+    nmf_sum_container: np.ndarray[f8],
+    period: i8 = 14,
+):
+    for i in nb.prange(1, pmf.size):
+        i_p = i + period
+        pmf_sum: f8 = 0.0
+        nmf_sum: f8 = 0.0
 
-    typical_price = (high + low + close) / 3
+        for i in nb.prange(i, period + i):
+            pmf_sum += pmf[i]
+            nmf_sum += nmf[i]
 
-    return 0, 0
+        pmf_sum_container[i_p] = pmf_sum
+        nmf_sum_container[i_p] = nmf_sum
+
+
+# @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+def _mfi(
+    pmf_sums: np.ndarray[f8],
+    nmf_sums: np.ndarray[f8],
+    mfi_container: np.ndarray[f8],
+    mfi_period: i8 = 14,
+):
+    for i in nb.prange(mfi_period + 1, mfi_container.size):
+        pmf_sum = pmf_sums[i]
+        nmf_sum = nmf_sums[i]
+        mfi_container[i] = (100 * pmf_sum) / (pmf_sum + nmf_sum)
 
 
 @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
@@ -481,11 +482,7 @@ def _adx(
     return adx_container, adx_container[-1]
 
 
-@nb.njit(
-    cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-    nogil=True,
-)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _adx_update(
     dx: f8,
     adx_p: f8,

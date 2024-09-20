@@ -132,3 +132,27 @@ def ichimoku_cloud_df(xls_loader: XLSXLoader):
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="mfi_df")
+def mfi_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-mfi.xlsx",
+            columns=[
+                "ts",
+                "high",
+                "low",
+                "close",
+                "typical",
+                "volume",
+                "rmf",
+                "pmf",
+                "nmf",
+                "pmf_sum_14",
+                "nmf_sum_14",
+                "mfi",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
