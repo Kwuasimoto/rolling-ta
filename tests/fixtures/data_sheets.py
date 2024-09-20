@@ -107,3 +107,28 @@ def adx_df(xls_loader: XLSXLoader):
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="ichimoku_cloud_df")
+def ichimoku_cloud_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-ichimoku_cloud.xlsx",
+            columns=[
+                "ts",
+                "high",
+                "low",
+                "high_max_9",
+                "low_min_9",
+                "high_max_26",
+                "low_max_26",
+                "high_max_52",
+                "low_max_52",
+                "tenkan",
+                "kijun",
+                "senkou_a",
+                "senkou_b",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))

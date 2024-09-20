@@ -1,88 +1,62 @@
-from numpy import mean
+import numpy as np
 import pandas as pd
 
-from rolling_ta.omni import NumbaIchimokuCloud
-from rolling_ta.logging import logger
-
-from ta.trend import IchimokuIndicator
 from tests.fixtures.eval import Eval
 
-
-# These tests confirm if the NumbaDMI Indicator is working as expected.
-
-# If someone can explain the following:
-# How is my init test working (test_numba_ichimoku_cloud) when comparing line b,
-# But when I perform the rolling test (test_numba_ichimoku_cloud_update)
+from rolling_ta.omni import NumbaIchimokuCloud
+from ta.trend import IchimokuIndicator
 
 
-# Initialization tests
-def test_numba_ichimoku_cloud(btc_df: pd.DataFrame, evaluate: Eval):
-    data = btc_df.iloc[:200].copy()
+def test_numba_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    rolling = NumbaIchimokuCloud(data)
-    expected = IchimokuIndicator(data["high"], data["low"])
-
-    a_start = max(rolling.period("tenkan"), rolling.period("kijun")) - 1
-    b_start = rolling.period("senkou") - 1
-
-    rolling_senkou_a = rolling.senkou_a().iloc[a_start:]
-    rolling_senkou_b = rolling.senkou_b().iloc[b_start:]
-    expected_senkou_a = expected.ichimoku_a().iloc[a_start:]
-    expected_senkou_b = expected.ichimoku_b().iloc[b_start:]
+    rolling = NumbaIchimokuCloud(ichimoku_cloud_df)
 
     evaluate(
-        expected.ichimoku_conversion_line().fillna(0).round(3),
-        rolling.tenkan().round(3),
+        ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
+        rolling.tenkan().to_numpy(dtype=np.float64),
+        name="NUMBA_TENKAN",
     )
     evaluate(
-        expected.ichimoku_base_line().fillna(0).round(3),
-        rolling.kijun().round(3),
+        ichimoku_cloud_df["kijun"].to_numpy(dtype=np.float64),
+        rolling.kijun().to_numpy(dtype=np.float64),
+        name="NUMBA_KIJUN",
     )
     evaluate(
-        expected_senkou_a.fillna(0).round(3),
-        rolling_senkou_a.round(3),
+        ichimoku_cloud_df["senkou_a"].to_numpy(dtype=np.float64),
+        rolling.senkou_a().to_numpy(dtype=np.float64),
+        name="NUMBA_SENKOU_A",
     )
     evaluate(
-        expected_senkou_b.fillna(0).round(3),
-        rolling_senkou_b.round(3),
+        ichimoku_cloud_df["senkou_b"].to_numpy(dtype=np.float64),
+        rolling.senkou_b().to_numpy(dtype=np.float64),
+        name="NUMBA_SENKOU_B",
     )
 
 
-def test_numba_ichimoku_cloud_update(btc_df: pd.DataFrame, evaluate: Eval):
-    data = btc_df.iloc[:100].copy()
+def test_numba_ichimoku_cloud_update(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    expected = IchimokuIndicator(data["high"], data["low"])
-    rolling = NumbaIchimokuCloud(data.iloc[:60])
+    rolling = NumbaIchimokuCloud(ichimoku_cloud_df.iloc[:100])
 
-    for _, series in data.iloc[60:].iterrows():
+    for _, series in ichimoku_cloud_df.iloc[100:].iterrows():
         rolling.update(series)
 
-    a_start = max(rolling.period("tenkan"), rolling.period("kijun")) - 1
-    b_start = rolling.period("senkou") - 1
-
-    rolling_senkou_a = rolling.senkou_a().iloc[a_start:]
-    rolling_senkou_b = rolling.senkou_b().iloc[b_start:]
-    expected_senkou_a = expected.ichimoku_a().iloc[a_start:]
-    expected_senkou_b = expected.ichimoku_b().iloc[b_start:]
-
-    expected.ichimoku_base_line()
-    expected.ichimoku_conversion_line()
-    expected.ichimoku_a()
-    expected.ichimoku_b()
-
     evaluate(
-        expected.ichimoku_conversion_line().fillna(0).round(3),
-        rolling.tenkan().round(3),
+        ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
+        rolling.tenkan().to_numpy(dtype=np.float64),
+        name="NUMBA_TENKAN_UPDATE",
     )
     evaluate(
-        expected.ichimoku_base_line().fillna(0).round(3),
-        rolling.kijun().round(3),
+        ichimoku_cloud_df["kijun"].to_numpy(dtype=np.float64),
+        rolling.kijun().to_numpy(dtype=np.float64),
+        name="NUMBA_KIJUN_UPDATE",
     )
     evaluate(
-        expected_senkou_a.fillna(0).round(3),
-        rolling_senkou_a.round(3),
+        ichimoku_cloud_df["senkou_a"].to_numpy(dtype=np.float64),
+        rolling.senkou_a().to_numpy(dtype=np.float64),
+        name="NUMBA_SENKOU_A_UPDATE",
     )
     evaluate(
-        expected_senkou_b.fillna(0).round(3),
-        rolling_senkou_b.round(3),
+        ichimoku_cloud_df["senkou_b"].to_numpy(dtype=np.float64),
+        rolling.senkou_b().to_numpy(dtype=np.float64),
+        name="NUMBA_SENKOU_B_UPDATE",
     )

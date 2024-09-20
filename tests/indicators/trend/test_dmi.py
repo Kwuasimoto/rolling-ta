@@ -15,6 +15,7 @@ def test_numba_dmi_pos(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["+dmi"].to_numpy(dtype=np.float64),
         NumbaDMI(adx_df).pdmi().to_numpy(dtype=np.float64),
+        name="NUMBA_DMI_POS",
     )
 
 
@@ -27,6 +28,7 @@ def test_numba_dmi_pos_update(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["+dmi"].to_numpy(dtype=np.float64),
         rolling.pdmi().to_numpy(dtype=np.float64),
+        name="NUMBA_DMI_POS_UPDATE",
     )
 
 
@@ -34,6 +36,7 @@ def test_numba_dmi_neg(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["-dmi"].to_numpy(dtype=np.float64),
         NumbaDMI(adx_df).ndmi().to_numpy(dtype=np.float64),
+        name="NUMBA_DMI_NEG",
     )
 
 
@@ -46,4 +49,5 @@ def test_numba_dmi_neg_update(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["-dmi"].to_numpy(dtype=np.float64),
         rolling.ndmi().to_numpy(dtype=np.float64),
+        name="NUMBA_DMI_NEG_UPDATE",
     )

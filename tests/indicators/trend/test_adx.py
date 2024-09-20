@@ -15,6 +15,7 @@ def test_numba_adx(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["adx"].to_numpy(dtype=np.float64),
         NumbaADX(adx_df).adx().to_numpy(dtype=np.float64),
+        name="NUMBA_ADX",
     )
 
 
@@ -27,4 +28,5 @@ def test_numba_adx_update(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["adx"].to_numpy(dtype=np.float64),
         rolling.adx().to_numpy(dtype=np.float64),
+        name="NUMBA_ADX_UPDATE",
     )

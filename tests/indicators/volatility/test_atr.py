@@ -9,33 +9,41 @@ from tests.fixtures.eval import Eval
 
 def test_atr(atr_df: pd.DataFrame, evaluate: Eval):
     evaluate(
-        atr_df["atr"].astype("float64").fillna(0).round(4),
-        AverageTrueRange(atr_df).atr().round(4),
+        atr_df["atr"].to_numpy(dtype=np.float64),
+        AverageTrueRange(atr_df).atr().to_numpy(dtype=np.float64),
+        name="ATR",
     )
 
 
 def test_atr_update(atr_df: pd.DataFrame, evaluate: Eval):
-    expected = atr_df["atr"].astype("float64").fillna(0).round(4)
     rolling = AverageTrueRange(atr_df.iloc[:20])
 
     for _, series in atr_df.iloc[20:].iterrows():
         rolling.update(series)
 
-    evaluate(expected, rolling.atr().round(4))
+    evaluate(
+        atr_df["atr"].to_numpy(dtype=np.float64),
+        rolling.atr().to_numpy(dtype=np.float64),
+        name="ATR_UPDATE",
+    )
 
 
 def test_numba_atr(atr_df: pd.DataFrame, evaluate: Eval):
     evaluate(
-        atr_df["atr"].astype("float64").fillna(0).round(4),
-        NumbaAverageTrueRange(atr_df, period_config=14).atr().round(4),
+        atr_df["atr"].to_numpy(dtype=np.float64),
+        NumbaAverageTrueRange(atr_df).atr().to_numpy(dtype=np.float64),
+        name="NUMBA_ATR",
     )
 
 
 def test_numba_atr_update(atr_df: pd.DataFrame, evaluate: Eval):
-    expected = atr_df["atr"].astype("float64").fillna(0).round(4)
     rolling = NumbaAverageTrueRange(atr_df.iloc[:20])
 
     for _, series in atr_df.iloc[20:].iterrows():
         rolling.update(series)
 
-    evaluate(expected, rolling.atr().round(4))
+    evaluate(
+        atr_df["atr"].to_numpy(dtype=np.float64),
+        rolling.atr().to_numpy(dtype=np.float64),
+        name="NUMBA_ATR_UPDATE",
+    )
