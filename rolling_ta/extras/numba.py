@@ -450,7 +450,7 @@ def _tr(
             close_p_container[i] - low[i],
         )
 
-    return tr_container, tr_container[-1], close_p_container[-1]
+    return tr_container, tr_container[-1], close[-1]
 
 
 @nb.njit(

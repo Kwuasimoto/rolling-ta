@@ -26,7 +26,9 @@ if __name__ == "__main__":
 
     tr = NumbaTrueRange(atr_df.iloc[:40])
 
-    for i, series in atr_df.iloc[40:].iterrows():
+    slice_b = atr_df.iloc[40:]
+
+    for i, series in slice_b.iterrows():
         tr.update(series)
 
     # writer = XLSXWriter("btc-sma.xlsx")
