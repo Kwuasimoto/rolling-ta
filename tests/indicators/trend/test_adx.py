@@ -11,26 +11,20 @@ from tests.fixtures.eval import Eval
 # These tests confirm if the NumbaDMI Indicator is working as expected.
 
 
-def test_numba_adx(btc_df: pd.DataFrame, evaluate: Eval):
-    data = btc_df.iloc[:200].copy()
-
-    expected = ADXIndicator(data["high"], data["low"], data["close"])
-    rolling = NumbaADX(data)
-
-    evaluate(expected.adx().round(3), rolling.adx().round(3))
+def test_numba_adx(adx_df: pd.DataFrame, evaluate: Eval):
+    evaluate(
+        adx_df["adx"].to_numpy(dtype=np.float64),
+        NumbaADX(adx_df).adx().to_numpy(dtype=np.float64),
+    )
 
 
-def test_numba_adx_update(btc_df: pd.DataFrame, evaluate: Eval):
-    data = btc_df.iloc[:200].copy()
+def test_numba_adx_update(adx_df: pd.DataFrame, evaluate: Eval):
+    rolling = NumbaADX(adx_df.iloc[:50])
 
-    expected = ADXIndicator(data["high"], data["low"], data["close"])
-    rolling = NumbaADX(data.iloc[:100])
-
-    for _, series in data.iloc[100:].iterrows():
+    for _, series in adx_df.iloc[50:].iterrows():
         rolling.update(series)
 
-    rolling_ema = rolling
     evaluate(
-        expected.adx().to_numpy(np.float64).round(3),
-        rolling_ema.adx().to_numpy(np.float64).round(3),
+        adx_df["adx"].to_numpy(dtype=np.float64),
+        rolling.adx().to_numpy(dtype=np.float64),
     )

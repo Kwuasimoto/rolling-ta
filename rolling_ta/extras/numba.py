@@ -1,18 +1,15 @@
-from functools import cache
-import os
 import numba as nb
 import numpy as np
 
-from numba.types import f8, f4, i4, i2, i8, b1
-import numba.types as ntypes
-import numba.typed as ntyped
+from numba.types import f8, f4, i8, i4
 
 from rolling_ta.env import NUMBA_DISK_CACHING
 from rolling_ta.logging import logger
 
 ## // HELPER FUNCTIONS \\
 ## Note: The outer njit function *supposedly* does not need to be supplied parallel=True.
-logger.info(f"Cache [numba={NUMBA_DISK_CACHING}]")
+## Cache loads compiled machine code from disk into RAM. It does not slow down function calls.
+logger.debug(f"Cache [numba={NUMBA_DISK_CACHING}]")
 
 
 @nb.njit(
@@ -149,8 +146,6 @@ def _sliding_midpoint(
 @nb.njit(
     parallel=True,
     cache=NUMBA_DISK_CACHING,
-    fastmath=True,
-    nogil=True,
 )
 def _sma(
     data: np.ndarray[f8],
@@ -338,7 +333,7 @@ def _obv(
         else:
             obv_container[i] = 0
 
-    obv = _prefix_sum(obv_container)
+    obv = np.cumsum(obv_container)
 
     return obv, obv[-1], close[-1]
 

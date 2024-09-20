@@ -18,7 +18,7 @@ class NumbaSMA(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period_config: int = 12,
+        period_config: int = 14,
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,
@@ -123,7 +123,7 @@ class SMA(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period_config: int = 12,
+        period_config: int = 14,
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,

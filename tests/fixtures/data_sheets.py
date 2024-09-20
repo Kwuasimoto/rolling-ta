@@ -15,8 +15,8 @@ def btc_df(csv_loader: CSVLoader):
 def obv_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-obv.xlsx",
-            columns=["date", "close", "up-down", "volume", "pos-neg", "obv"],
+            "btc-obv.xlsx",
+            columns=["ts", "close", "volume", "up", "down", "obv"],
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -26,7 +26,7 @@ def obv_df(xls_loader: XLSXLoader):
 def sma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-sma.xlsx", columns=["date", "close", "sma"]
+            "btc-sma.xlsx", columns=["ts", "close", "sma"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -36,7 +36,7 @@ def sma_df(xls_loader: XLSXLoader):
 def ema_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-ema.xlsx", columns=["date", "close", "ema"]
+            "btc-ema.xlsx", columns=["ts", "close", "ema"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -46,16 +46,14 @@ def ema_df(xls_loader: XLSXLoader):
 def rsi_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-rsi.xlsx",
+            "btc-rsi.xlsx",
             columns=[
-                "date",
+                "ts",
                 "close",
-                "change",
                 "gain",
                 "loss",
-                "avg_gain",
-                "avg_loss",
-                "rs",
+                "gain_14",
+                "loss_14",
                 "rsi",
             ],
         ).copy()
@@ -68,19 +66,17 @@ def rsi_df(xls_loader: XLSXLoader):
 def atr_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-atr.xlsx",
+            "btc-atr.xlsx",
             columns=[
-                "date",
+                "ts",
                 "high",
                 "low",
                 "close",
-                "h-l",
-                "|h-c_p|",
-                "|l-c_p|",
                 "tr",
                 "atr",
             ],
         ).copy()
+
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
 
@@ -89,20 +85,22 @@ def atr_df(xls_loader: XLSXLoader):
 def adx_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "cs-adx.xlsx",
+            "btc-adx.xlsx",
             columns=[
-                "date",
+                "ts",
                 "high",
                 "low",
                 "close",
                 "tr",
-                "+dm",
-                "-dm",
-                "tr14",
-                "+dm14",
-                "-dm14",
-                "+di14",
-                "-di14",
+                "atr",
+                "h-h_p",
+                "l_p-l",
+                "+dx",
+                "-dx",
+                "+dx_14",
+                "-dx_14",
+                "+dmi",
+                "-dmi",
                 "dx",
                 "adx",
             ],

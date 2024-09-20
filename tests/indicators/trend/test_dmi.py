@@ -11,55 +11,39 @@ from tests.fixtures.eval import Eval
 # Somehow, I managed to properly calculate DMI and period sooner. This is why the tests are spliced.
 
 
-def test_numba_dmi_pos(btc_df: pd.DataFrame, evaluate: Eval):
-    sample = btc_df.iloc[:30]
-
-    expected = ADXIndicator(sample["high"], sample["low"], sample["close"])
-    rolling = NumbaDMI(sample)
-
-    expected_pdmi = expected.adx_pos().to_numpy(np.float64).round(4)
-    rolling_pdmi = rolling.pdmi().to_numpy(np.float64).round(4)
-
-    evaluate(expected_pdmi[15:], rolling_pdmi[15:])
+def test_numba_dmi_pos(adx_df: pd.DataFrame, evaluate: Eval):
+    evaluate(
+        adx_df["+dmi"].to_numpy(dtype=np.float64),
+        NumbaDMI(adx_df).pdmi().to_numpy(dtype=np.float64),
+    )
 
 
-def test_numba_dmi_pos_update(btc_df: pd.DataFrame, evaluate: Eval):
-    sample = btc_df.iloc[:30]
+def test_numba_dmi_pos_update(adx_df: pd.DataFrame, evaluate: Eval):
+    rolling = NumbaDMI(adx_df.iloc[:20])
 
-    expected = ADXIndicator(sample["high"], sample["low"], sample["close"])
-    rolling = NumbaDMI(sample.iloc[:20])
-
-    for _, series in sample.iloc[20:].iterrows():
+    for _, series in adx_df.iloc[20:].iterrows():
         rolling.update(series)
 
-    expected_pdmi = expected.adx_pos().to_numpy(np.float64).round(4)
-    rolling_pdmi = rolling.pdmi().to_numpy(np.float64).round(4)
-
-    evaluate(expected_pdmi[15:], rolling_pdmi[15:])
-
-
-def test_numba_dmi_neg(btc_df: pd.DataFrame, evaluate: Eval):
-    sample = btc_df.iloc[:30]
-
-    expected = ADXIndicator(sample["high"], sample["low"], sample["close"])
-    rolling = NumbaDMI(sample)
-
-    expected_pdmi = expected.adx_neg().to_numpy(np.float64).round(4)
-    rolling_pdmi = rolling.ndmi().to_numpy(np.float64).round(4)
-
-    evaluate(expected_pdmi[15:], rolling_pdmi[15:])
+    evaluate(
+        adx_df["+dmi"].to_numpy(dtype=np.float64),
+        rolling.pdmi().to_numpy(dtype=np.float64),
+    )
 
 
-def test_numba_dmi_neg_update(btc_df: pd.DataFrame, evaluate: Eval):
-    sample = btc_df.iloc[:30]
+def test_numba_dmi_neg(adx_df: pd.DataFrame, evaluate: Eval):
+    evaluate(
+        adx_df["-dmi"].to_numpy(dtype=np.float64),
+        NumbaDMI(adx_df).ndmi().to_numpy(dtype=np.float64),
+    )
 
-    expected = ADXIndicator(sample["high"], sample["low"], sample["close"])
-    rolling = NumbaDMI(sample.iloc[:20])
 
-    for _, series in sample.iloc[20:].iterrows():
+def test_numba_dmi_neg_update(adx_df: pd.DataFrame, evaluate: Eval):
+    rolling = NumbaDMI(adx_df.iloc[:20])
+
+    for _, series in adx_df.iloc[20:].iterrows():
         rolling.update(series)
 
-    expected_pdmi = expected.adx_neg().to_numpy(np.float64).round(4)
-    rolling_pdmi = rolling.ndmi().to_numpy(np.float64).round(4)
-
-    evaluate(expected_pdmi[15:], rolling_pdmi[15:])
+    evaluate(
+        adx_df["-dmi"].to_numpy(dtype=np.float64),
+        rolling.ndmi().to_numpy(dtype=np.float64),
+    )
