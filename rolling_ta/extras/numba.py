@@ -15,37 +15,6 @@ logger.debug(f"Cache [numba={NUMBA_DISK_CACHING}]")
 @nb.njit(
     parallel=True, inline="always", cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True
 )
-def _shift(
-    arr: np.ndarray[f8],
-    shift: i4 = -1,
-    dtype: np.ndarray[f8] = np.float64,
-) -> np.ndarray[f8]:
-    n = arr.size
-
-    shifted = _empty(n, dtype=dtype)
-
-    if shift == 0:
-        raise ValueError("_shift: shift parameter cannot be 0")
-
-    if shift > 0:
-        for i in nb.prange(shift, n):
-            shifted[i] = arr[i - shift]
-        for i in nb.prange(shift):
-            shifted[i] = 0
-    else:
-        n_shift = n + shift
-
-        for i in nb.prange(n_shift):
-            shifted[i] = arr[i - shift]
-        for i in nb.prange(n_shift, n):
-            shifted[i] = 0
-
-    return shifted
-
-
-@nb.njit(
-    parallel=True, inline="always", cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True
-)
 def _highs_lows(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
@@ -82,20 +51,6 @@ def _mean(arr: np.ndarray[f8]) -> f8:
     for i in nb.prange(n):
         sum += arr[i]
     return sum / n
-
-
-@nb.njit(
-    parallel=True, inline="always", cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True
-)
-def _empty(
-    size: i4,
-    insert_n_zeros: i4 = 0,
-    dtype: np.dtype = np.float64,
-) -> np.ndarray[f8]:
-    arr = np.empty(size, dtype=dtype)
-    for i in nb.prange(insert_n_zeros):
-        arr[i] = 0
-    return arr
 
 
 @nb.njit(
@@ -143,7 +98,7 @@ def _sma_update(
     close: f8, window_sum: f8, window: np.ndarray[f8], period: i4 = 14
 ) -> tuple[np.ndarray[f8], f8, f8]:
     first = window[0]
-    window = _shift(window)
+    window[:-1] = window[1:]
     window[-1] = close
     window_sum = (window_sum - first) + close
     return window_sum / period, window, window_sum
@@ -263,7 +218,7 @@ def _obv(
         else:
             obv_container[i] = 0
 
-    obv = np.cumsum(obv_container)
+    obv = _prefix_sum(obv_container)
 
     return obv, obv[-1], close[-1]
 

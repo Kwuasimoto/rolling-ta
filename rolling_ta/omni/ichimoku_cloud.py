@@ -3,15 +3,12 @@ from typing import Dict, Union
 import numpy as np
 import pandas as pd
 from rolling_ta.extras.numba import (
-    _ichimoku_cloud,
-    _ichimoku_cloud_update,
     _kijun,
     _kijun_update,
     _senkou_a,
     _senkou_a_update,
     _senkou_b,
     _senkou_b_update,
-    _shift,
     _tenkan,
     _tenkan_update,
 )
