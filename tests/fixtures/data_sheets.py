@@ -1,6 +1,6 @@
 import pytest
 
-from rolling_ta.data import XLSLoader, CSVLoader
+from rolling_ta.data import XLSXLoader, CSVLoader
 
 
 @pytest.fixture(name="btc_df")
@@ -12,7 +12,7 @@ def btc_df(csv_loader: CSVLoader):
 
 
 @pytest.fixture(name="obv_df")
-def obv_df(xls_loader: XLSLoader):
+def obv_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-obv.xlsx",
@@ -23,7 +23,7 @@ def obv_df(xls_loader: XLSLoader):
 
 
 @pytest.fixture(name="sma_df")
-def sma_df(xls_loader: XLSLoader):
+def sma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-sma.xlsx", columns=["date", "close", "sma"]
@@ -33,7 +33,7 @@ def sma_df(xls_loader: XLSLoader):
 
 
 @pytest.fixture(name="ema_df")
-def ema_df(xls_loader: XLSLoader):
+def ema_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-ema.xlsx", columns=["date", "close", "ema"]
@@ -43,7 +43,7 @@ def ema_df(xls_loader: XLSLoader):
 
 
 @pytest.fixture(name="rsi_df")
-def rsi_df(xls_loader: XLSLoader):
+def rsi_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-rsi.xlsx",
@@ -65,7 +65,7 @@ def rsi_df(xls_loader: XLSLoader):
 
 # Used in TrueRange tests.
 @pytest.fixture(name="atr_df")
-def atr_df(xls_loader: XLSLoader):
+def atr_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-atr.xlsx",
@@ -86,7 +86,7 @@ def atr_df(xls_loader: XLSLoader):
 
 
 @pytest.fixture(name="adx_df")
-def adx_df(xls_loader: XLSLoader):
+def adx_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "cs-adx.xlsx",

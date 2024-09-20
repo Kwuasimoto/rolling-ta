@@ -1,23 +1,21 @@
-from time import time
-
 import numpy as np
-from numba import njit
-from numba.types import f8
-from rolling_ta.data.csv_loader import CSVLoader
-from rolling_ta.extras.numba import _empty, _mean, _shift
-from rolling_ta.omni.ichimoku_cloud import NumbaIchimokuCloud
 
+from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
+from rolling_ta.momentum import NumbaStochasticRSI, NumbaRSI
+from ta.momentum import StochRSIIndicator, RSIIndicator
 
 if __name__ == "__main__":
     loader = CSVLoader()
     btc = loader.read_resource()
 
-    slice_a = btc.iloc[:120]
-    slice_b = btc.iloc[120:140]
+    writer = XLSXWriter("btc-lrf.xlsx")
 
-    cloud = NumbaIchimokuCloud(slice_a)
+    ts = btc["timestamp"].iloc[:200].to_numpy(np.float64)
+    high = btc["high"].iloc[:200].to_numpy(np.float64)
+    low = btc["low"].iloc[:200].to_numpy(np.float64)
+    close = btc["close"].iloc[:200].to_numpy(np.float64)
 
-    for _, series in slice_b.iterrows():
-        cloud.update(series)
-
-    print(cloud.senkou_b())
+    writer.write(ts, 1)
+    writer.write(high, 2)
+    writer.write(low, 3)
+    writer.write(close, 4)

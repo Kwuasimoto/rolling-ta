@@ -288,15 +288,19 @@ def _stoch_rsi(
     rsi: np.ndarray[f8],
     window: np.ndarray[f8],
     stoch_rsi_container: np.ndarray[f8],
-    period: i4,
-):
+    rsi_period: i4 = 14,
+    stoch_period: i4 = 10,
+) -> None:
     n = rsi.size
-    window[:period] = rsi[:period]
 
-    for i in nb.prange(period, n):
+    # window[:stoch_period] = rsi[rsi_period : rsi_period + stoch_period]
+
+    for i in range(rsi_period, n - stoch_period):
         curr_rsi = rsi[i]
-        max_rsi = max(rsi[i - period : i])
-        min_rsi = min(rsi[i - period : i])
+        y = i + stoch_period
+
+        max_rsi = max(rsi[i:y])
+        min_rsi = min(rsi[i:y])
         stoch_rsi_container[i] = (curr_rsi - min_rsi) / (max_rsi - min_rsi)
 
 
