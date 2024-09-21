@@ -80,7 +80,12 @@ def _typical_price(
     typical_price_container: np.ndarray[f8],
 ):
     for i in nb.prange(typical_price_container.size):
-        typical_price_container[i] = (high[i] + low[i] + close[i]) / 3
+        typical_price_container[i] = _typical_price_single(high[i], low[i], close[i])
+
+
+@nb.njit(inline="always", cache=NUMBA_DISK_CACHING, fastmath=True)
+def _typical_price_single(high: f8, low: f8, close: f8) -> f8:
+    return (high + low + close) / 3
 
 
 ## // INDICATOR FUNCTIONS \\
@@ -239,13 +244,13 @@ def _obv_update(close: f8, volume: f8, close_p: f8, obv_latest: f8) -> f8:
     return obv_latest
 
 
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _rmf(price: np.ndarray[f8], volume: np.ndarray[f8], rmf_container: np.ndarray[f8]):
     for i in nb.prange(price.size):
         rmf_container[i] = price[i] * volume[i]
 
 
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _mf_pos_neg(
     price: np.ndarray[f8],
     rmf: np.ndarray[f8],
@@ -262,7 +267,7 @@ def _mf_pos_neg(
             nmf_container[i] = rmf[i]
 
 
-# @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _mf_pos_neg_sum(
     pmf: np.ndarray[f8],
     nmf: np.ndarray[f8],
@@ -284,17 +289,58 @@ def _mf_pos_neg_sum(
 
 # njit caching is breaking this single function? Runs once but then dies trying
 # to load from cache
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _mfi(
     pmf_sums: np.ndarray[f8],
     nmf_sums: np.ndarray[f8],
     mfi_container: np.ndarray[f8],
     mfi_period: i8 = 14,
-):
+) -> tuple[np.ndarray[f8], np.ndarray[f8]]:
+
     for i in nb.prange(mfi_period, mfi_container.size):
         pmf_sum = pmf_sums[i]
         nmf_sum = nmf_sums[i]
         mfi_container[i] = (100 * pmf_sum) / (pmf_sum + nmf_sum)
+
+
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+def _mf_update(
+    volume: f8,
+    price_curr: f8,
+    price_prev: f8,
+    pmf_window: np.ndarray[f8],
+    nmf_window: np.ndarray[f8],
+    pmf_sum: f8,
+    nmf_sum: f8,
+) -> tuple[f8, f8]:
+    rmf = volume * price_curr
+
+    pmf_popped: f8 = pmf_window[0]
+    nmf_popped: f8 = nmf_window[0]
+    pmf_window[:-1] = pmf_window[1:]
+    nmf_window[:-1] = nmf_window[1:]
+
+    if price_curr > price_prev:
+        pmf_window[-1] = rmf
+        nmf_window[-1] = 0
+        pmf_sum += rmf
+    elif price_curr < price_prev:
+        pmf_window[-1] = 0
+        nmf_window[-1] = rmf
+        nmf_sum += rmf
+    else:
+        pmf_window[-1] = 0
+        nmf_window[-1] = 0
+
+    pmf_sum -= pmf_popped
+    nmf_sum -= nmf_popped
+
+    return pmf_sum, nmf_sum
+
+
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+def _mfi_update(pmf_sum: f8, nmf_sum: f8) -> tuple[f8, f8, f8]:
+    return (100 * pmf_sum) / (pmf_sum + nmf_sum)
 
 
 @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
@@ -325,7 +371,7 @@ def _tr_update(high: f8, low: f8, close_p: f8) -> f8:
     return max(high - low, abs(high - close_p), close_p - low)
 
 
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _atr(
     tr: np.ndarray[f8], atr_container: np.ndarray[f8], period: i4 = 14, n_1: i4 = 13
 ) -> tuple[np.ndarray[f8], f8]:

@@ -30,10 +30,15 @@ if __name__ == "__main__":
             "mfi",
         ],
     ).copy()
+    mfi_expected = mfi_df["mfi"].to_numpy(dtype=np.float64)
+    mfi = NumbaMFI(mfi_df.iloc[:20])
 
-    mfi = NumbaMFI(mfi_df.iloc[:40])
+    for [e, [i, series]] in zip(mfi_expected[20:], mfi_df.iloc[20:].iterrows()):
+        mfi.update(i, series)
+        r = mfi._mfi[i]
 
-    logger.info(mfi.mfi())
+        if not np.isclose(e, r, atol=1e-7):
+            logger.info(f"Oof [i={i}, e={e}, r={r}]")
 
     # slice_b = mfi_df.iloc[40:]
 

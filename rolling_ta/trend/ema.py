@@ -45,7 +45,7 @@ class NumbaEMA(Indicator):
         self._ema_latest = _ema_update(data["close"], self._weight, self._ema_latest)
 
         if self._memory:
-            self._ema = np.append(self._ema, self._ema_latest)
+            self._ema.append(self._ema_latest)
 
     def ema(self):
         if not self._memory:

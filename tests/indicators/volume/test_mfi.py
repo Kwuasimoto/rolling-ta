@@ -17,11 +17,14 @@ def test_numba_mfi(mfi_df: pd.DataFrame, evaluate: Eval):
     )
 
 
-# def test_numba_mfi_update(btc_df: pd.DataFrame, evaluate: Eval):
-#     expected = btc_df["obv"].astype("float64").fillna(0).round(4)
-#     rolling = NumbaMFI(btc_df.iloc[:20])
+def test_numba_mfi_update(mfi_df: pd.DataFrame, evaluate: Eval):
+    rolling = NumbaMFI(mfi_df.iloc[:20])
 
-#     for _, series in btc_df.iloc[20:].iterrows():
-#         rolling.update(series)
+    for _, series in mfi_df.iloc[20:].iterrows():
+        rolling.update(series)
 
-#     evaluate(expected, rolling.obv())
+    evaluate(
+        mfi_df["mfi"].to_numpy(dtype=np.float64),
+        rolling.mfi().to_numpy(dtype=np.float64),
+        name="NUMBA_MFI_UPDATE",
+    )

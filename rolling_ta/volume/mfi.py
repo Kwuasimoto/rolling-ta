@@ -4,8 +4,11 @@ from rolling_ta.extras.numba import (
     _mf_pos_neg,
     _mf_pos_neg_sum,
     _mfi,
+    _mfi_update,
+    _mf_update,
     _rmf,
     _typical_price,
+    _typical_price_single,
 )
 
 from rolling_ta.indicator import Indicator
@@ -64,10 +67,35 @@ class NumbaMFI(Indicator):
         if self._memory:
             self._mfi = array("f", mfi)
 
+        self._typical_price_prev = typical_price[-1]
+
+        self._pmf_sum = pmf_sums[-1]
+        self._nmf_sum = nmf_sums[-1]
+        self._pmf_window = pmf[-self._period_config :]
+        self._nmf_window = nmf[-self._period_config :]
+
         self.drop_data()
 
     def update(self, data: pd.Series):
-        return super().update(data)
+        volume = data["volume"]
+        typical_price = _typical_price_single(data["high"], data["low"], data["close"])
+
+        self._pmf_sum, self._nmf_sum = _mf_update(
+            volume,
+            typical_price,
+            self._typical_price_prev,
+            self._pmf_window,
+            self._nmf_window,
+            self._pmf_sum,
+            self._nmf_sum,
+        )
+
+        mfi = _mfi_update(self._pmf_sum, self._nmf_sum)
+
+        self._typical_price_prev = typical_price
+
+        if self._memory:
+            self._mfi.append(mfi)
 
     def mfi(self):
         return pd.Series(self._mfi)
