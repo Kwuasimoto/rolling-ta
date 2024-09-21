@@ -3,9 +3,9 @@ from pandas import DataFrame
 from rolling_ta.extras.numba import (
     _mf_pos_neg,
     _mf_pos_neg_sum,
+    _mfi,
     _rmf,
     _typical_price,
-    _mfi,
 )
 
 from rolling_ta.indicator import Indicator

@@ -193,9 +193,7 @@ def _stoch_rsi(
 ) -> None:
     n = rsi.size
 
-    # window[:stoch_period] = rsi[rsi_period : rsi_period + stoch_period]
-
-    for i in range(rsi_period, n - stoch_period):
+    for i in nb.prange(rsi_period, n - stoch_period):
         curr_rsi = rsi[i]
         y = i + stoch_period
 
@@ -264,7 +262,7 @@ def _mf_pos_neg(
             nmf_container[i] = rmf[i]
 
 
-@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+# @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
 def _mf_pos_neg_sum(
     pmf: np.ndarray[f8],
     nmf: np.ndarray[f8],
@@ -272,27 +270,28 @@ def _mf_pos_neg_sum(
     nmf_sum_container: np.ndarray[f8],
     period: i8 = 14,
 ):
-    for i in nb.prange(1, pmf.size):
-        i_p = i + period
+    for i in nb.prange(period, pmf.size):
         pmf_sum: f8 = 0.0
         nmf_sum: f8 = 0.0
 
-        for i in nb.prange(i, period + i):
-            pmf_sum += pmf[i]
-            nmf_sum += nmf[i]
+        for j in nb.prange((i - period) + 1, i + 1):
+            pmf_sum += pmf[j]
+            nmf_sum += nmf[j]
 
-        pmf_sum_container[i_p] = pmf_sum
-        nmf_sum_container[i_p] = nmf_sum
+        pmf_sum_container[i] = pmf_sum
+        nmf_sum_container[i] = nmf_sum
 
 
-# @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
+# njit caching is breaking this single function? Runs once but then dies trying
+# to load from cache
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True)
 def _mfi(
     pmf_sums: np.ndarray[f8],
     nmf_sums: np.ndarray[f8],
     mfi_container: np.ndarray[f8],
     mfi_period: i8 = 14,
 ):
-    for i in nb.prange(mfi_period + 1, mfi_container.size):
+    for i in nb.prange(mfi_period, mfi_container.size):
         pmf_sum = pmf_sums[i]
         nmf_sum = nmf_sums[i]
         mfi_container[i] = (100 * pmf_sum) / (pmf_sum + nmf_sum)
