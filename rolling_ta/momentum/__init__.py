@@ -1,4 +1,4 @@
-from .rsi import RSI, NumbaRSI
-from .stochastic_rsi import StochasticRSI, NumbaStochasticRSI
+from .rsi import RSI
+from .stochastic_rsi import StochasticRSI
 
-__all__ = ["RSI", "NumbaRSI", "StochasticRSI", "NumbaStochasticRSI"]
+__all__ = ["RSI", "StochasticRSI"]

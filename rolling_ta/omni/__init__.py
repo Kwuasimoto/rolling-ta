@@ -1,3 +1,3 @@
-from .ichimoku_cloud import IchimokuCloud, NumbaIchimokuCloud
+from .ichimoku_cloud import IchimokuCloud
 
-__all__ = ["IchimokuCloud", "NumbaIchimokuCloud"]
+__all__ = ["IchimokuCloud"]

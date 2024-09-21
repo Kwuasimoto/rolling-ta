@@ -1,26 +1,20 @@
 import numpy as np
 import pandas as pd
 
-from ta.trend import ADXIndicator
-
-from rolling_ta.trend import NumbaDMI
-from rolling_ta.logging import logger
 from tests.fixtures.eval import Eval
+from rolling_ta.trend import DMI
 
 
-# Somehow, I managed to properly calculate DMI and period sooner. This is why the tests are spliced.
-
-
-def test_numba_dmi_pos(adx_df: pd.DataFrame, evaluate: Eval):
+def test_dmi_pos(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["+dmi"].to_numpy(dtype=np.float64),
-        NumbaDMI(adx_df).pdmi().to_numpy(dtype=np.float64),
+        DMI(adx_df).pdmi().to_numpy(dtype=np.float64),
         name="NUMBA_DMI_POS",
     )
 
 
-def test_numba_dmi_pos_update(adx_df: pd.DataFrame, evaluate: Eval):
-    rolling = NumbaDMI(adx_df.iloc[:20])
+def test_dmi_pos_update(adx_df: pd.DataFrame, evaluate: Eval):
+    rolling = DMI(adx_df.iloc[:20])
 
     for _, series in adx_df.iloc[20:].iterrows():
         rolling.update(series)
@@ -32,16 +26,16 @@ def test_numba_dmi_pos_update(adx_df: pd.DataFrame, evaluate: Eval):
     )
 
 
-def test_numba_dmi_neg(adx_df: pd.DataFrame, evaluate: Eval):
+def test_dmi_neg(adx_df: pd.DataFrame, evaluate: Eval):
     evaluate(
         adx_df["-dmi"].to_numpy(dtype=np.float64),
-        NumbaDMI(adx_df).ndmi().to_numpy(dtype=np.float64),
+        DMI(adx_df).ndmi().to_numpy(dtype=np.float64),
         name="NUMBA_DMI_NEG",
     )
 
 
-def test_numba_dmi_neg_update(adx_df: pd.DataFrame, evaluate: Eval):
-    rolling = NumbaDMI(adx_df.iloc[:20])
+def test_dmi_neg_update(adx_df: pd.DataFrame, evaluate: Eval):
+    rolling = DMI(adx_df.iloc[:20])
 
     for _, series in adx_df.iloc[20:].iterrows():
         rolling.update(series)

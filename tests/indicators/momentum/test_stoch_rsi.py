@@ -3,7 +3,7 @@ import pandas as pd
 
 from tests.fixtures.eval import Eval
 from rolling_ta.logging import logger
-from rolling_ta.momentum import NumbaStochasticRSI
+from rolling_ta.momentum import StochasticRSI
 from ta.momentum import StochRSIIndicator
 
 

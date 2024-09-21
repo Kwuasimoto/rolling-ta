@@ -2,14 +2,12 @@ import numpy as np
 import pandas as pd
 
 from tests.fixtures.eval import Eval
-
-from rolling_ta.omni import NumbaIchimokuCloud
-from ta.trend import IchimokuIndicator
+from rolling_ta.omni import IchimokuCloud
 
 
-def test_numba_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
+def test_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    rolling = NumbaIchimokuCloud(ichimoku_cloud_df)
+    rolling = IchimokuCloud(ichimoku_cloud_df)
 
     evaluate(
         ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
@@ -33,9 +31,9 @@ def test_numba_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
     )
 
 
-def test_numba_ichimoku_cloud_update(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
+def test_ichimoku_cloud_update(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    rolling = NumbaIchimokuCloud(ichimoku_cloud_df.iloc[:100])
+    rolling = IchimokuCloud(ichimoku_cloud_df.iloc[:100])
 
     for _, series in ichimoku_cloud_df.iloc[100:].iterrows():
         rolling.update(series)

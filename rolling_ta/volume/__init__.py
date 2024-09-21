@@ -1,4 +1,4 @@
 from .mfi import MFI
-from .obv import OBV, NumbaOBV
+from .obv import OBV
 
-__all__ = ["MFI", "OBV", "NumbaOBV"]
+__all__ = ["MFI", "OBV"]

@@ -1,11 +1,11 @@
 import numpy as np
 
 from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
-from rolling_ta.momentum import NumbaStochasticRSI, NumbaRSI
+from rolling_ta.momentum import StochasticRSI, RSI
 from ta.momentum import StochRSIIndicator, RSIIndicator
 from rolling_ta.logging import logger
-from rolling_ta.volatility.tr import NumbaTrueRange
-from rolling_ta.volume.mfi import NumbaMFI
+from rolling_ta.volatility.tr import TrueRange
+from rolling_ta.volume.mfi import MFI
 
 if __name__ == "__main__":
     # logger.info(not np.isclose(1.000999, 1.000119, atol=1e-6))
@@ -31,7 +31,7 @@ if __name__ == "__main__":
         ],
     ).copy()
     mfi_expected = mfi_df["mfi"].to_numpy(dtype=np.float64)
-    mfi = NumbaMFI(mfi_df.iloc[:20])
+    mfi = MFI(mfi_df.iloc[:20])
 
     for [e, [i, series]] in zip(mfi_expected[20:], mfi_df.iloc[20:].iterrows()):
         mfi.update(i, series)

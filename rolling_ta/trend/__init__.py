@@ -1,16 +1,12 @@
-from .sma import SMA, NumbaSMA
-from .ema import EMA, NumbaEMA
+from .sma import SMA
+from .ema import EMA
 
-from .dmi import DMI, NumbaDMI
-from .adx import ADX, NumbaADX
+from .dmi import DMI
+from .adx import ADX
 
 __all__ = [
     "DMI",
-    "NumbaDMI",
     "ADX",
-    "NumbaADX",
     "EMA",
-    "NumbaEMA",
     "SMA",
-    "NumbaSMA",
 ]
