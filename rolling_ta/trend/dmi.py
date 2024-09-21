@@ -9,7 +9,7 @@ from rolling_ta.extras.numba import (
     _dmi_update,
 )
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TrueRange
+from rolling_ta.volatility import TR
 import pandas as pd
 import numpy as np
 
@@ -24,13 +24,11 @@ class DMI(Indicator):
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,
-        tr: Optional[TrueRange] = None,
+        tr: Optional[TR] = None,
     ) -> None:
         super().__init__(data, period, memory, retention, init)
         self._n_1 = period - 1
-        self._tr = (
-            TrueRange(data, period, memory, retention, init) if tr is None else tr
-        )
+        self._tr = TR(data, period, memory, retention, init) if tr is None else tr
         if self._init:
             self.init()
 

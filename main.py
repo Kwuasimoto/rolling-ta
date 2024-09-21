@@ -4,7 +4,7 @@ from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
 from rolling_ta.momentum import StochasticRSI, RSI
 from ta.momentum import StochRSIIndicator, RSIIndicator
 from rolling_ta.logging import logger
-from rolling_ta.volatility.tr import TrueRange
+from rolling_ta.volatility.tr import TR
 from rolling_ta.volume.mfi import MFI
 
 if __name__ == "__main__":

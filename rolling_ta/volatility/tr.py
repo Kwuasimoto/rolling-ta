@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 
 
-class TrueRange(Indicator):
+class TR(Indicator):
 
     def __init__(
         self,

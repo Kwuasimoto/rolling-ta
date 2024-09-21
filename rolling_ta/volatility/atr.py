@@ -2,16 +2,16 @@ from array import array
 from pandas import DataFrame
 from rolling_ta.indicator import Indicator
 from rolling_ta.extras.numba import _atr, _atr_update
-from rolling_ta.volatility import TrueRange
+from rolling_ta.volatility import TR
 
 
 import pandas as pd
 import numpy as np
 
-from typing import Dict, Optional
+from typing import Optional
 
 
-class AverageTrueRange(Indicator):
+class ATR(Indicator):
     """
     Rolling Average True Range (ATR) indicator.
 
@@ -36,10 +36,10 @@ class AverageTrueRange(Indicator):
         memory: bool = True,
         retention: int = 20000,
         init: bool = True,
-        true_range: Optional[TrueRange] = None,
+        true_range: Optional[TR] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
-        self._tr = TrueRange(data, period_config) if true_range is None else true_range
+        self._tr = TR(data, period_config) if true_range is None else true_range
         self._n_1 = self._period_config - 1
         if self._init:
             self.init()

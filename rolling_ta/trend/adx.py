@@ -2,7 +2,7 @@ from array import array
 from pandas import DataFrame, Series
 from rolling_ta.extras.numba import _dx, _adx, _dx_update, _adx_update
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TrueRange
+from rolling_ta.volatility import TR
 from rolling_ta.trend import DMI, DMI
 import pandas as pd
 import numpy as np
@@ -20,7 +20,7 @@ class ADX(Indicator):
         retention: Union[int, None] = None,
         init: bool = True,
         dmi: Optional[DMI] = None,
-        tr: Optional[TrueRange] = None,
+        tr: Optional[TR] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
         self._n_1 = period_config - 1
