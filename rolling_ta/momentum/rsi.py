@@ -22,7 +22,6 @@ class RSI(Indicator):
     Material
     --------
         https://www.investopedia.com/terms/r/rsi.asp
-        https://pypi.org/project/ta/
     """
 
     def __init__(

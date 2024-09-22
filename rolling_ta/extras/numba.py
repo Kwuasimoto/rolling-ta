@@ -618,3 +618,95 @@ def _senkou_a(
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
 def _senkou_a_update(tenkan: f8, kijun: f8) -> f8:
     return (tenkan + kijun) * 0.5
+
+
+# @nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+def _linear_regression(
+    ys: np.ndarray[f8],
+    slope_container: np.ndarray[f8],
+    intercept_container: np.ndarray[f8],
+    period: i4 = 14,
+):
+    n: i8 = ys.size
+    p_1: i8 = period - 1
+
+    x: i4 = 0
+    xx: i8 = 0.0
+
+    for i in nb.prange(period):
+        x += i
+        xx += i * i
+
+    for i in nb.prange(p_1, n):
+        y: f8 = 0.0
+        xy: f8 = 0.0
+
+        for j in nb.prange(i - p_1, i + 1):
+            y += ys[j]
+            xy += (j - (i - p_1)) * ys[j]
+
+        slope_container[i] = ((period * xy) - (x * y)) / ((period * xx) - (x * x))
+        intercept_container[i] = (y - (slope_container[i] * x)) / period
+
+
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+def _linear_regression_forecast(
+    slopes: np.ndarray[f8],
+    intercepts: np.ndarray[f8],
+    forecast_container: np.ndarray[f8],
+    forecast: i4 = 14,
+):
+    n = slopes.size
+    assert forecast_container.size >= n + forecast
+
+    # Calculate the initial forecast, using constant 1
+    for i in nb.prange(slopes.size):
+        forecast_container[i] = (slopes[i] * 1) + intercepts[i]
+
+    # We only use the last slop and intercept to calculate the forecast?
+    slope = slopes[-1]
+    intercept = intercepts[-1]
+
+    for i in nb.prange(1, forecast + 1):
+        j = i + n - 1
+        # We add +1 to i because if we don't, we get the value forecast_container[-1].
+        forecast_container[j] = (slope * (i + 1)) + intercept
+
+
+@nb.njit(parallel=True, cache=NUMBA_DISK_CACHING, fastmath=True, nogil=True)
+def _linear_regression_r2(
+    ys: np.ndarray[f8],
+    slopes: np.ndarray[f8],
+    intercepts: np.ndarray[f8],
+    r2_container: np.ndarray[f8],
+    period: i4 = 14,
+):
+    n: i4 = ys.size
+    p_1: i4 = period - 1
+
+    # Start from the period-1, loop to size of ys.
+    for i in nb.prange(p_1, n):
+
+        # Calculate y_mean, start from 0, to 13 (14 iterations)
+        y_mean: f8 = 0.0
+        for j in range(i - p_1, i + 1):
+            y_mean += ys[j]
+        y_mean /= period
+
+        ss_r: f8 = 0.0
+        ss_t: f8 = 0.0
+
+        for k in range(period):
+            y = ys[k + (i - p_1)]
+            p = slopes[i] * k + intercepts[i]
+
+            p_delta = y - p
+            m_delta = y - y_mean
+
+            ss_r += p_delta * p_delta
+            ss_t += m_delta * m_delta
+
+        if ss_t > 0.0:
+            r2_container[i] = 1 - (ss_r / ss_t)
+        else:
+            r2_container[i] = 1.0

@@ -1,6 +1,12 @@
 import numpy as np
 
 from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
+from rolling_ta.extras.numba import (
+    _linear_regression,
+    _linear_regression_forecast,
+    _linear_regression_r2,
+    _typical_price,
+)
 from rolling_ta.momentum import StochasticRSI, RSI
 from ta.momentum import StochRSIIndicator, RSIIndicator
 from rolling_ta.logging import logger
@@ -9,46 +15,34 @@ from rolling_ta.volume.mfi import MFI
 
 if __name__ == "__main__":
     # logger.info(not np.isclose(1.000999, 1.000119, atol=1e-6))
-    # loader = CSVLoader()
-    # btc = loader.read_resource()
+    loader = CSVLoader()
+    btc = loader.read_resource()
+    prices = np.empty(btc["close"].size)
+    _typical_price(
+        btc["high"].to_numpy(dtype=np.float64),
+        btc["low"].to_numpy(dtype=np.float64),
+        btc["close"].to_numpy(dtype=np.float64),
+        prices,
+    )
 
-    loader = XLSXLoader()
-    mfi_df = loader.read_resource(
-        "btc-mfi.xlsx",
-        columns=[
-            "ts",
-            "high",
-            "low",
-            "close",
-            "typical",
-            "volume",
-            "rmf",
-            "pmf",
-            "nmf",
-            "pmf_sum_14",
-            "nmf_sum_14",
-            "mfi",
-        ],
-    ).copy()
-    mfi_expected = mfi_df["mfi"].to_numpy(dtype=np.float64)
-    mfi = MFI(mfi_df.iloc[:20])
+    intercepts = np.zeros(btc["close"].size, dtype=np.float64)
+    slopes = np.zeros(btc["close"].size, dtype=np.float64)
 
-    for [e, [i, series]] in zip(mfi_expected[20:], mfi_df.iloc[20:].iterrows()):
-        mfi.update(i, series)
-        r = mfi._mfi[i]
+    x_range = np.arange(14)
+    x = np.sum(x_range)
+    xx = np.sum(x_range * x_range)
 
-        if not np.isclose(e, r, atol=1e-7):
-            logger.info(f"Oof [i={i}, e={e}, r={r}]")
+    y = np.sum(prices[: x_range.size])
+    xy = np.sum(x_range * prices[: x_range.size])
 
-    # slice_b = mfi_df.iloc[40:]
+    _linear_regression(prices[:200], slopes[:200], intercepts[:200])
+    logger.info(slopes[13:40])
 
-    # for i, series in slice_b.iterrows():
-    #     mfi.update(series)
+    forecast = 14
+    forecasts = np.zeros(slopes[:200].size + forecast)
+    _linear_regression_forecast(slopes[:200], intercepts[:200], forecasts)
 
-    # writer = XLSXWriter("btc-sma.xlsx")
+    r2 = np.zeros(prices[:200].size)
+    _linear_regression_r2(prices[:200], slopes[:200], intercepts[:200], r2)
 
-    # ts = btc["timestamp"].iloc[:200].to_numpy(np.float64)
-    # close = btc["close"].iloc[:200].to_numpy(np.float64)
-
-    # writer.write(ts, 1)
-    # writer.write(close, 2)
+    logger.info(r2)
