@@ -37,6 +37,7 @@ if __name__ == "__main__":
 
     _linear_regression(prices[:200], slopes[:200], intercepts[:200])
     logger.info(slopes[13:40])
+    logger.info(intercepts[13:40])
 
     forecast = 14
     forecasts = np.zeros(slopes[:200].size + forecast)

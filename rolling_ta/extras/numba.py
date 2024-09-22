@@ -17,6 +17,7 @@ logger.debug(
 
 ## // HELPER FUNCTIONS \\
 
+
 @nb.njit(
     parallel=NUMBA_PARALLEL,
     inline="always",
@@ -95,7 +96,10 @@ def _sliding_midpoint(
 
 
 @nb.njit(
-    parallel=NUMBA_PARALLEL, inline="always", cache=NUMBA_DISK_CACHING, fastmath=True
+    parallel=NUMBA_PARALLEL,
+    inline="always",
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
 )
 def _typical_price(
     high: np.ndarray[f8],
@@ -107,7 +111,7 @@ def _typical_price(
         typical_price_container[i] = _typical_price_single(high[i], low[i], close[i])
 
 
-@nb.njit(inline="always", cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(inline="always", cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
 def _typical_price_single(high: f8, low: f8, close: f8) -> f8:
     return (high + low + close) / 3
 
@@ -222,7 +226,7 @@ def _rsi_update(
     return rsi, avg_gain, avg_loss
 
 
-@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
 def _stoch_rsi(
     rsi: np.ndarray[f8],
     window: np.ndarray[f8],
@@ -241,7 +245,7 @@ def _stoch_rsi(
         stoch_rsi_container[i] = (curr_rsi - min_rsi) / (max_rsi - min_rsi)
 
 
-@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=True)
+@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
 def _stoch_k(stoch_rsi: np.ndarray[f8], k_container: np.ndarray[f8], k_period: i4):
     for i in nb.prange():
         pass
@@ -724,7 +728,12 @@ def _senkou_a_update(tenkan: f8, kijun: f8) -> f8:
     return (tenkan + kijun) * 0.5
 
 
-# @nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
 def _linear_regression(
     ys: np.ndarray[f8],
     slope_container: np.ndarray[f8],
