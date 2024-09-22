@@ -39,6 +39,9 @@ from .numba import (
     _senkou_a_update,
     _senkou_b,
     _senkou_b_update,
+    _linear_regression,
+    _linear_regression_r2,
+    _linear_regression_forecast,
 )
 
 __all__ = [
@@ -82,4 +85,7 @@ __all__ = [
     "_senkou_a_update",
     "_senkou_b",
     "_senkou_b_update",
+    "_linear_regression",
+    "_linear_regression_r2",
+    "_linear_regression_forecast",
 ]
