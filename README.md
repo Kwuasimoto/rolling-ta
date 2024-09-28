@@ -152,6 +152,7 @@ Tests [pytests](./tests/indicators/)
 
 _Expected Updates for 0.9_
 
+- Create update fn overloaded signature that accepts just the price information, instead of forcing people to supply a pd.Series object.
 - Allow users to pass a mutable array to Indicator.update() function, instead of having to rebuild their existing data.
   - Potential implementation (might be in 1.0), intelligently read existing data and parse required information from it to perform incremental updates.
 - Implement Indicator.to_numpy(), Indicator.to_series() for more explicit data return.
