@@ -14,6 +14,11 @@
 **Does not support intra timestep updates**: </br>
 The update functions for the indicators are not intelligent _yet_, they do not know if the new data being processed is a terminated candle. If you're working with a 1 minute timeframe, and you update SMA (example) 5 times within a minute, the last 5 values of the SMA will be within that TimeFrame. This will have to be handled on your end until I'm requested to, or deem it necessary to implement this into the code. Happy Trading 🤓
 
+### Update Schedule
+
+**Not being worked on**: </br>
+I am currently working on some ML stuff for the foreseeable future, this library will likely get some more love in 1-2 months once I've gotten other private projects up to speed.
+
 ## TOC
 
 - [Project Description](#project-description)
@@ -28,7 +33,7 @@ The update functions for the indicators are not intelligent _yet_, they do not k
 
 ## Project Description
 
-Leveraing **Numpy** and **Numba**, rolling-ta is designed for fast and efficient technical analysis, while maintaining the simplicity and ease of use of **Pandas**. It provides an intuitive single-responsibility API focused exclusively on technical analysis calculations. Prioritizing optimizations for speed, while being lightweight.
+Leveraing **Numpy** and **Numba**, rolling-ta is designed for fast and efficient technical analysis, while maintaining the simplicity and ease of use of **Pandas**. It provides an intuitive single-responsibility API focused on technical analysis calculations and real-time updates. Prioritizing optimizations for speed, while being lightweight.
 
 Key features include:
 
