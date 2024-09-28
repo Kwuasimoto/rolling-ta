@@ -1,11 +1,11 @@
 [project]
 name = "rolling_ta"
-version = "0.8.1"
+version = "0.8.2"
 authors = [
     {name="Kwuasimoto", email="thomasdouglasshank@gmail.com"}
 ]
 description = "Simple, single responsibility API for fast technical indicator calculations and incrementation."
-dependencies = ["pandas==2.2.2", "numba==0.60.0", "python-dotenv"]
+dependencies = ["pandas==2.2.2", "numba==0.60.0", "python-dotenv==1.0.1"]
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [

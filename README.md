@@ -9,6 +9,11 @@
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | pytest | ![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen)<div style="border-left: 1px solid; height: 20px; margin: 0 10px; margin-top: 8px; display: inline-block;"></div>![Passing](https://img.shields.io/badge/passing-100%25-brightgreen) |
 
+### **Primary Errors (to be fixed at some point)**
+
+**Does not support intra timestep updates**: </br>
+The update functions for the indicators are not intelligent _yet_, they do not know if the new data being processed is a terminated candle. If you're working with a 1 minute timeframe, and you update SMA (example) 5 times within a minute, the last 5 values of the SMA will be within that TimeFrame. This will have to be handled on your end until I'm requested to, or deem it necessary to implement this into the code. Happy Trading 🤓
+
 ## TOC
 
 - [Project Description](#project-description)
