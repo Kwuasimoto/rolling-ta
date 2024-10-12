@@ -601,12 +601,12 @@ def _bollinger_bands(
         lower_container[i] = ma[j] - (weighted_stddev)
 
 
-# @nb.njit(
-#     parallel=NUMBA_PARALLEL,
-#     cache=NUMBA_DISK_CACHING,
-#     fastmath=NUMBA_FASTMATH,
-#     nogil=NUMBA_NOGIL,
-# )
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
 def _bop(
     open: np.ndarray[f8],
     high: np.ndarray[f8],
@@ -953,7 +953,8 @@ def _senkou_a(
     a_start = max(tenkan_period, kijun_period) - 1
     for i in nb.prange(a_start, tenkan.size):
         senkou_a_container[i] = (tenkan[i] + kijun[i]) * 0.5
-    senkou_a_container[:a_start] = senkou_a_container[a_start]
+    for i in nb.prange(a_start):
+        senkou_a_container[i] = senkou_a_container[a_start]
 
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)

@@ -7,6 +7,8 @@ from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
 from rolling_ta.trend import LinearRegressionR2, lr
 from tests.fixtures.data_sheets import lr_df
 
+from ta.volume import VolumeWeightedAveragePrice
+
 
 def write_xlsx_file():
     loader = CSVLoader()

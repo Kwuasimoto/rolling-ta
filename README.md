@@ -19,6 +19,10 @@ The update functions for the indicators are not intelligent _yet_, they do not k
 **Not being worked on**: </br>
 I am currently working on some ML stuff for the foreseeable future, this library will likely get some more love in 1-2 months once I've gotten other private projects up to speed.
 
+### 0.8.2 -> 0.8.3
+
+- Use to\_\* functions to get indicator data
+
 ## TOC
 
 - [Project Description](#project-description)
@@ -70,14 +74,29 @@ loader = CSVLoader()
 data = loader.read_resources()
 
 # returns unnamed pd.Series
-sma = SMA(data).sma()
+sma = SMA(data).to_numpy(dtype=np.float64)
 ```
 
 **Rolling updates**
 
 ```py
-# Updates internal _sma array.
 sma.update(data.iloc[index])
+```
+
+**Getting indicator as different types**
+
+```py
+sma_raw = sma.to_array()
+sma_np = sma.to_numpy()
+sma_pd = sma.to_series()
+```
+
+**Getting an imbedded indicator**
+
+```py
+adx = ADX(data)
+
+positive_directional_movement = adx.to_numpy(get="pdmi", dtype=np.float64)
 ```
 
 ## Environment
@@ -131,7 +150,7 @@ _see_ [speed tests](./tests/speed)
 | Indicator                  | Lib               | Speed                                                    |
 | -------------------------- | ----------------- | -------------------------------------------------------- |
 | Average Directional Index  | Rolling-TA</br>TA | 813 μs ± 102 μs per loop</br>93.7 ms ± 544 μs per loop   |
-| Average True Range         | Rolling-TA</br>TA | 33.4 ms ± 833 μs per loop</br>40.5 ms ± 835 μs per loop  |
+| Average True Range         | Rolling-TA</br>TA | 1.32 ms ± 118 μs per loop</br>40.5 ms ± 835 μs per loop  |
 | Exponential Moving Average | Rolling-TA</br>TA | 52.8 μs ± 1.17 μs per loop</br>138 μs ± 4.43 μs per loop |
 | Ichimoku Cloud             | Rolling-TA</br>TA | 216 μs ± 65.8 μs per loop</br>3.07 ms ± 316 μs per loop  |
 | Money Flow Index           | Rolling-TA</br>TA | 382 μs ± 11.2 μs per loop</br>122 ms ± 1.92 ms per loop  |
