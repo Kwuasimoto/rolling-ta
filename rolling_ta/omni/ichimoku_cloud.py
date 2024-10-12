@@ -1,7 +1,8 @@
 from array import array
-from typing import Dict, Union
+from typing import Dict, Literal, Union
 import numpy as np
 import pandas as pd
+
 from rolling_ta.extras.numba import (
     _kijun,
     _kijun_update,
@@ -12,9 +13,8 @@ from rolling_ta.extras.numba import (
     _tenkan,
     _tenkan_update,
 )
+
 from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
-from collections import deque
 
 
 class IchimokuCloud(Indicator):
@@ -42,6 +42,8 @@ class IchimokuCloud(Indicator):
     - 'lagging': (int, optional) Custom period for the Chikou Span (lagging span).
       If not provided, it defaults to the 'kijun' period (typically 26).
     """
+
+    _period_default = {"tenkan": 9, "kijun": 26, "senkou": 52}
 
     def __init__(
         self,
@@ -84,10 +86,10 @@ class IchimokuCloud(Indicator):
         _senkou_a(tenkan, kijun, senkou_a, self._tenkan_period, self._kijun_period)
 
         if self._memory:
-            self._tenkan = array("f", tenkan)
-            self._kijun = array("f", kijun)
-            self._senkou_a = array("f", senkou_a)
-            self._senkou_b = array("f", senkou_b)
+            self._tenkan = array("d", tenkan)
+            self._kijun = array("d", kijun)
+            self._senkou_a = array("d", senkou_a)
+            self._senkou_b = array("d", senkou_b)
 
         self._tenkan_latest = tenkan[-1]
         self._kijun_latest = kijun[-1]
@@ -98,6 +100,7 @@ class IchimokuCloud(Indicator):
         self._low = low[-self._clip :]
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
         self._high = np.roll(self._high, -1)
@@ -123,26 +126,36 @@ class IchimokuCloud(Indicator):
         self._senkou_a_latest = senkou_a
         self._senkou_b_latest = senkou_b
 
-    def tenkan(self):
-        return pd.Series(self._tenkan)
+    def to_array(
+        self, get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan"
+    ):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)
 
     def tenkan_latest(self):
         return self._tenkan_latest
 
-    def kijun(self):
-        return pd.Series(self._kijun)
-
     def kijun_latest(self):
         return self._kijun_latest
 
-    def senkou_a(self):
-        return pd.Series(self._senkou_a)
-
     def senkou_a_latest(self):
         return self._senkou_a_latest
-
-    def senkou_b(self):
-        return pd.Series(self._senkou_b)
 
     def senkou_b_latest(self):
         return self._senkou_b_latest

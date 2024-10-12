@@ -6,11 +6,9 @@ from rolling_ta.trend import EMA
 
 
 def test_ema(ema_df: pd.DataFrame, evaluate: Eval):
-    evaluate(
-        ema_df["ema"].to_numpy(dtype=np.float64),
-        EMA(ema_df).ema().to_numpy(dtype=np.float64),
-        name="NUMBA_EMA",
-    )
+    expected = ema_df["ema"].to_numpy(dtype=np.float64)
+    rolling = EMA(ema_df).to_numpy(dtype=np.float64)
+    evaluate(expected, rolling, "EMA")
 
 
 def test_ema_update(ema_df: pd.DataFrame, evaluate: Eval):
@@ -21,6 +19,6 @@ def test_ema_update(ema_df: pd.DataFrame, evaluate: Eval):
 
     evaluate(
         ema_df["ema"].to_numpy(dtype=np.float64),
-        rolling.ema().to_numpy(dtype=np.float64),
+        rolling.to_numpy(dtype=np.float64),
         name="NUMBA_EMA_UPDATE",
     )

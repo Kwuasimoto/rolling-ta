@@ -2,6 +2,7 @@ import pandas as pd
 from rolling_ta.indicator import Indicator
 from typing import Dict
 
+
 class MACD(Indicator):
 
     def __init__(
@@ -18,7 +19,7 @@ class MACD(Indicator):
             self.init()
 
     def init(self):
-        pass
+        super().init(__name__)
 
     def update(self, data: pd.Series):
-        return super().update(data)
+        return super().update(data, __name__)

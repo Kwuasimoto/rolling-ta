@@ -1,5 +1,5 @@
 from array import array
-from typing import Optional
+from typing import Literal, Optional
 from rolling_ta.extras.numba import (
     _dm,
     _dm_update,
@@ -38,7 +38,7 @@ class DMI(Indicator):
 
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
-        tr = self._tr.tr().to_numpy(np.float64)
+        tr = self.to_numpy("tr", np.float64)
 
         # pdm, ndm, pdm[-1], ndm[-1], high[-1], low[-1]
 
@@ -74,6 +74,7 @@ class DMI(Indicator):
             self._ndmi = array("d", self._ndmi)
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
         high = data["high"]
@@ -98,11 +99,31 @@ class DMI(Indicator):
             self._pdmi.append(self._pdmi_p)
             self._ndmi.append(self._ndmi_p)
 
-    def pdmi(self):
-        return pd.Series(self._pdmi)
+    def to_array(self, get: Literal["pdmi", "ndmi", "tr"] = "pdmi"):
+        if get == "tr":
+            return self._tr.to_array(get)
+        return super().to_array(get)
 
-    def ndmi(self):
-        return pd.Series(self._ndmi)
+    def to_numpy(
+        self,
+        get: Literal["pdmi", "ndmi", "tr"] = "pdmi",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        if get == "tr":
+            return self._tr.to_numpy(get, dtype, **kwargs)
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["pdmi", "ndmi", "tr"] = "pdmi",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        if get == "tr":
+            self._tr.to_series(get, dtype, name, **kwargs)
+        return super().to_series(get, dtype, name, **kwargs)
 
     def pdmi_latest(self):
         return self._pdmi_p

@@ -1,5 +1,5 @@
 from array import array
-from typing import Union
+from typing import Literal, Union
 from rolling_ta.extras.numba import _tr, _tr_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
@@ -56,8 +56,25 @@ class TR(Indicator):
         self._close_p = close
         return self._tr_latest
 
-    def tr(self):
-        return pd.Series(self._tr)
+    def to_array(self, get: Literal["tr"] = "tr"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["tr"] = "tr",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["tr"] = "tr",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)
 
     def tr_latest(self):
         return self._tr_latest

@@ -2,7 +2,7 @@ from array import array
 from rolling_ta.extras.numba import _obv, _obv_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
-from typing import Union, Dict
+from typing import Literal, Union, Dict
 
 import pandas as pd
 import numpy as np
@@ -12,7 +12,7 @@ class OBV(Indicator):
     def __init__(
         self,
         data: pd.DataFrame,
-        period_config: Dict[str, int] = {"ema": 20},
+        period_config: Union[Dict[str, int], None] = None,
         memory: bool = True,
         retention: Union[int, None] = None,
         init: bool = True,
@@ -48,5 +48,22 @@ class OBV(Indicator):
 
         self._close_p = close
 
-    def obv(self):
-        return pd.Series(self._obv)
+    def to_array(self, get: Literal["obv"] = "obv"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["obv"] = "obv",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["obv"] = "obv",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)

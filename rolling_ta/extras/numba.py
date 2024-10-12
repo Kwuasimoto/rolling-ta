@@ -1,3 +1,5 @@
+from math import floor
+from re import M
 import numba as nb
 import numpy as np
 
@@ -68,6 +70,17 @@ def _mean(arr: np.ndarray[f8]) -> f8:
     for i in nb.prange(n):
         sum += arr[i]
     return sum / n
+
+
+@nb.njit(parallel=True, nogil=True, fastmath=True, cache=True, inline="always")
+def _std_dev(window: np.ndarray[f4]) -> tuple[f4, f4]:
+    m: f4 = _mean(window)
+    variance: f4 = 0.0
+    for i in nb.prange(window.size):
+        x: f4 = window[i]
+        variance += (x - m) ** 2
+    variance /= window.size
+    return variance**0.5, m
 
 
 @nb.njit(
@@ -172,6 +185,60 @@ def _ema_update(close: f8, weight: f8, ema_latest: f8) -> np.ndarray[f8]:
 
 
 @nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    parallel=NUMBA_PARALLEL,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _wma(close: np.ndarray[f8], wma_container: np.ndarray[f8], period: i4 = 14):
+    weight_sum: i4 = 0
+    p_1: i4 = period - 1
+
+    for i in nb.prange(1, period + 1):
+        weight_sum += i
+
+    for i in nb.prange(close.size - period + 1):
+        current_weighted_sum: f8 = 0.0
+
+        for j in nb.prange(0, period):
+            current_weighted_sum += close[i + j] * (j + 1)
+
+        wma_container[i + p_1] = current_weighted_sum / weight_sum
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    parallel=NUMBA_PARALLEL,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _hma(
+    wma_full: np.ndarray[f8],
+    wma_half: np.ndarray[f8],
+    hma_internim: np.ndarray[f8],
+    hma_container: np.ndarray[f8],
+    wma_full_period: i4 = 14,
+):
+    for i in nb.prange(wma_full_period - 1, hma_container.size):
+        hma_internim[i] = (wma_half[i] * 2) - wma_full[i]
+
+    period_sqrt = floor(wma_full_period**0.5)
+    p_1 = period_sqrt - 1
+    weight_sum: i4 = 0
+
+    for i in nb.prange(1, period_sqrt + 1):
+        weight_sum += i
+
+    for i in nb.prange(wma_full_period - 1, hma_container.size - period_sqrt + 1):
+        current_weighted_sum: f8 = 0.0
+
+        for j in nb.prange(0, period_sqrt):
+            current_weighted_sum += hma_internim[i + j] * (j + 1)
+
+        hma_container[i + p_1] = current_weighted_sum / weight_sum
+
+
+@nb.njit(
     parallel=NUMBA_PARALLEL,
     cache=NUMBA_DISK_CACHING,
     fastmath=NUMBA_FASTMATH,
@@ -226,29 +293,70 @@ def _rsi_update(
     return rsi, avg_gain, avg_loss
 
 
-@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
-def _stoch_rsi(
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    nogil=NUMBA_NOGIL,
+    fastmath=NUMBA_FASTMATH,
+)
+def _stoch_k(
     rsi: np.ndarray[f8],
-    window: np.ndarray[f8],
-    stoch_rsi_container: np.ndarray[f8],
+    stoch_k_container: np.ndarray[f8],
     rsi_period: i4 = 14,
-    stoch_period: i4 = 10,
-) -> None:
-    n = rsi.size
+    k_period: i4 = 10,
+    k_smoothing: i4 = 3,
+) -> np.ndarray[f8]:
+    n = stoch_k_container.size
 
-    for i in nb.prange(rsi_period, n - stoch_period):
-        curr_rsi = rsi[i]
-        y = i + stoch_period
+    last_max: f8 = 0.0
+    last_min: f8 = 0.0
 
-        max_rsi = max(rsi[i:y])
-        min_rsi = min(rsi[i:y])
-        stoch_rsi_container[i] = (curr_rsi - min_rsi) / (max_rsi - min_rsi)
+    for i in nb.prange(rsi_period + k_period, n + 1):
+        curr_i = i - k_period
+
+        last_min: f8 = rsi[curr_i]
+        last_max: f8 = rsi[curr_i]
+
+        for j in range(curr_i, i):
+            if rsi[j] < last_min:
+                last_min = rsi[j]
+            if rsi[j] > last_max:
+                last_max = rsi[j]
+
+        stoch_k_container[i - 1] = (rsi[i - 1] - last_min) / (last_max - last_min)
+
+    if k_smoothing > 0:
+        for i in range(stoch_k_container.size, rsi_period + k_period + k_smoothing, -1):
+            k_sum: f8 = 0.0
+
+            for j in nb.prange(i - k_smoothing, i):
+                k_sum += stoch_k_container[j]
+
+            stoch_k_container[i - 1] = k_sum / k_smoothing
+
+    return rsi[-k_period:]
 
 
-@nb.njit(parallel=NUMBA_PARALLEL, cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
-def _stoch_k(stoch_rsi: np.ndarray[f8], k_container: np.ndarray[f8], k_period: i4):
-    for i in nb.prange():
-        pass
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    nogil=NUMBA_NOGIL,
+    fastmath=NUMBA_FASTMATH,
+)
+def _stoch_d(
+    stoch_k: np.ndarray[f8],
+    stoch_d_container: np.ndarray[f8],
+    rsi_period: i4 = 14,
+    k_period: i4 = 10,
+    d_smoothing: i4 = 3,
+):
+    for i in range(stoch_k.size, rsi_period + k_period + d_smoothing, -1):
+        d_sum: f8 = 0.0
+
+        for j in nb.prange(i - d_smoothing, i):
+            d_sum += stoch_k[j]
+
+        stoch_d_container[i - 1] = d_sum / d_smoothing
 
 
 @nb.njit(
@@ -406,6 +514,130 @@ def _mfi_update(pmf_sum: f8, nmf_sum: f8) -> tuple[f8, f8, f8]:
     return (100 * pmf_sum) / (pmf_sum + nmf_sum)
 
 
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
+def _vwap(
+    timestamp: np.ndarray[i8],
+    price: np.ndarray[f8],
+    volume: np.ndarray[f8],
+    vwap_container: np.ndarray[f8],
+    length: i4 = 1440,
+):
+    # determine where to reset the vwap (defaults to start of day (86400))
+    t_gate = length * 60
+
+    raw_accum: f8 = 0.0
+    vol_accum: f8 = 0.0
+
+    for i in range(timestamp.size):
+        if timestamp[i] % t_gate == 0:
+            raw_accum = 0.0
+            vol_accum = 0.0
+
+        raw_accum += price[i] * volume[i]
+        vol_accum += volume[i]
+
+        vwap_container[i] = raw_accum / vol_accum
+
+
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _donchian_channels(
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    highs: np.ndarray[f8],
+    lows: np.ndarray[f8],
+    centers: np.ndarray[f8],
+    period: i4 = 14,
+):
+    for i in nb.prange(period - 1, high.size):
+        h: f8 = high[i]
+        l: f8 = low[i]
+
+        for j in nb.prange(i - period + 1, i + 1):
+            if high[j] > h:
+                h = high[j]
+            if low[j] < l:
+                l = low[j]
+
+        highs[i] = h
+        lows[i] = l
+        centers[i] = (h + l) * 0.5
+
+
+@nb.njit(
+    parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _bollinger_bands(
+    price: np.ndarray[f8],
+    ma: np.ndarray[f8],
+    upper_container: np.ndarray[f8],
+    lower_container: np.ndarray[f8],
+    period: i4 = 20,
+    weight: f4 = 2.0,
+):
+    for i in nb.prange(period - 1, ma.size):
+        to = 1 + i
+
+        price_sum: f8 = 0.0
+        for j in nb.prange(to - period, to):
+            price_sum += price[j]
+        mean: f8 = price_sum / period
+
+        variance: f8 = 0.0
+        for j in nb.prange(to - period, to):
+            variance += (price[j] - mean) ** 2
+        variance /= period
+
+        weighted_stddev = (variance**0.5) * weight
+
+        upper_container[i] = ma[j] + (weighted_stddev)
+        lower_container[i] = ma[j] - (weighted_stddev)
+
+
+# @nb.njit(
+#     parallel=NUMBA_PARALLEL,
+#     cache=NUMBA_DISK_CACHING,
+#     fastmath=NUMBA_FASTMATH,
+#     nogil=NUMBA_NOGIL,
+# )
+def _bop(
+    open: np.ndarray[f8],
+    high: np.ndarray[f8],
+    low: np.ndarray[f8],
+    close: np.ndarray[f8],
+    bop_container: np.ndarray[f8],
+    smoothing: i4 = 14,
+):
+    for i in nb.prange(bop_container.size):
+        if high[i] - low[i] == 0:
+            bop_container[i] = 0
+        else:
+            bop_container[i] = (close[i] - open[i]) / (high[i] - low[i])
+
+    if smoothing > 0:
+        for i in range(bop_container.size - 1, -1, -1):
+            i_1 = i + 1
+            bop_sum: f8 = 0.0
+
+            if i >= (smoothing - 1):
+
+                for j in nb.prange(i_1 - smoothing, i_1):
+                    bop_sum += bop_container[j]
+                bop_container[i] = bop_sum / smoothing
+
+            else:
+                for j in nb.prange(i_1):
+                    bop_sum += bop_container[j]
+                bop_container[i] = bop_sum / i_1
+
+
 @nb.njit(
     parallel=NUMBA_PARALLEL,
     cache=NUMBA_DISK_CACHING,
@@ -443,7 +675,11 @@ def _tr_update(high: f8, low: f8, close_p: f8) -> f8:
 def _atr(
     tr: np.ndarray[f8], atr_container: np.ndarray[f8], period: i4 = 14, n_1: i4 = 13
 ) -> tuple[np.ndarray[f8], f8]:
-    atr_container[period - 1] = _mean(tr[:period])
+    mean: f8 = 0.0
+    for i in nb.prange(period):
+        mean += tr[i]
+    atr_container[period - 1] = mean / period
+
     for i in range(period, tr.size):
         atr_container[i] = ((atr_container[i - 1] * n_1) + tr[i]) / period
     return atr_container, atr_container[-1]
@@ -485,7 +721,6 @@ def _dm(
     return pdm, ndm, high[-1], low[-1]
 
 
-# OK
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
 def _dm_update(high: f8, low: f8, high_p: f8, low_p: f8) -> tuple[f8, f8]:
     move_up = high - high_p
@@ -525,7 +760,6 @@ def _dm_smoothing(
     return s_x_container, s_x_container[-1]
 
 
-# OK
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
 def _dm_smoothing_update(x: f8, s_x_p: f8, period: i4 = 14) -> f8:
     return s_x_p - (s_x_p / period) + x
@@ -551,7 +785,6 @@ def _dmi(
     return dmi_container, dmi_container[-1]
 
 
-# OK
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
 def _dmi_update(s_dm: f8, s_tr: f8) -> f8:
     return (s_dm / s_tr) * 100
@@ -785,10 +1018,11 @@ def _linear_regression_forecast(
     slope = slopes[-1]
     intercept = intercepts[-1]
 
-    for i in nb.prange(1, forecast + 1):
-        j = i + n - 1
-        # We add +1 to i because if we don't, we get the value forecast_container[-1].
-        forecast_container[j] = (slope * (i + 1)) + intercept
+    if forecast > 0:
+        for i in nb.prange(1, forecast + 1):
+            j = i + n - 1
+            # We add +1 to i because if we don't, we get the value forecast_container[-1].
+            forecast_container[j] = (slope * (i + 1)) + intercept
 
 
 @nb.njit(

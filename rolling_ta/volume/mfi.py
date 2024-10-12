@@ -1,4 +1,5 @@
 from array import array
+from typing import Literal
 from pandas import DataFrame
 from rolling_ta.extras.numba import (
     _mf_pos_neg,
@@ -14,8 +15,6 @@ from rolling_ta.extras.numba import (
 from rolling_ta.indicator import Indicator
 import pandas as pd
 import numpy as np
-
-from collections import deque
 
 
 class MFI(Indicator):
@@ -102,5 +101,22 @@ class MFI(Indicator):
         if self._memory:
             self._mfi.append(mfi)
 
-    def mfi(self):
-        return pd.Series(self._mfi)
+    def to_array(self, get: Literal["mfi"] = "mfi"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["mfi"] = "mfi",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["mfi"] = "mfi",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)

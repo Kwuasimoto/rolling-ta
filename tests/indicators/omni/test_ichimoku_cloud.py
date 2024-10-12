@@ -11,23 +11,23 @@ def test_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
     evaluate(
         ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
-        rolling.tenkan().to_numpy(dtype=np.float64),
-        name="NUMBA_TENKAN",
+        rolling.to_numpy(get="tenkan", dtype=np.float64),
+        "TENKAN",
     )
     evaluate(
         ichimoku_cloud_df["kijun"].to_numpy(dtype=np.float64),
-        rolling.kijun().to_numpy(dtype=np.float64),
-        name="NUMBA_KIJUN",
+        rolling.to_numpy(get="kijun", dtype=np.float64),
+        "KIJUN",
     )
     evaluate(
         ichimoku_cloud_df["senkou_a"].to_numpy(dtype=np.float64),
-        rolling.senkou_a().to_numpy(dtype=np.float64),
-        name="NUMBA_SENKOU_A",
+        rolling.to_numpy(get="senkou_a", dtype=np.float64),
+        "SENKOU_A",
     )
     evaluate(
         ichimoku_cloud_df["senkou_b"].to_numpy(dtype=np.float64),
-        rolling.senkou_b().to_numpy(dtype=np.float64),
-        name="NUMBA_SENKOU_B",
+        rolling.to_numpy(get="senkou_b", dtype=np.float64),
+        "SENKOU_B",
     )
 
 
@@ -40,21 +40,21 @@ def test_ichimoku_cloud_update(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
     evaluate(
         ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
-        rolling.tenkan().to_numpy(dtype=np.float64),
-        name="NUMBA_TENKAN_UPDATE",
+        rolling.to_numpy(get="tenkan", dtype=np.float64),
+        "TENKAN_UPDATE",
     )
     evaluate(
         ichimoku_cloud_df["kijun"].to_numpy(dtype=np.float64),
-        rolling.kijun().to_numpy(dtype=np.float64),
-        name="NUMBA_KIJUN_UPDATE",
+        rolling.to_numpy(get="kijun", dtype=np.float64),
+        "KIJUN_UPDATE",
     )
     evaluate(
         ichimoku_cloud_df["senkou_a"].to_numpy(dtype=np.float64),
-        rolling.senkou_a().to_numpy(dtype=np.float64),
-        name="NUMBA_SENKOU_A_UPDATE",
+        rolling.to_numpy(get="senkou_a", dtype=np.float64),
+        "SENKOU_A_UPDATE",
     )
     evaluate(
         ichimoku_cloud_df["senkou_b"].to_numpy(dtype=np.float64),
-        rolling.senkou_b().to_numpy(dtype=np.float64),
-        name="NUMBA_SENKOU_B_UPDATE",
+        rolling.to_numpy(get="senkou_b", dtype=np.float64),
+        "SENKOU_B_UPDATE",
     )

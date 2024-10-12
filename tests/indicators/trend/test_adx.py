@@ -6,11 +6,9 @@ from rolling_ta.trend import ADX
 
 
 def test_adx(adx_df: pd.DataFrame, evaluate: Eval):
-    evaluate(
-        adx_df["adx"].to_numpy(dtype=np.float64),
-        ADX(adx_df).adx().to_numpy(dtype=np.float64),
-        name="NUMBA_ADX",
-    )
+    expected = adx_df["adx"].to_numpy(dtype=np.float64)
+    rolling = ADX(adx_df).to_numpy(dtype=np.float64)
+    evaluate(expected, rolling, "ADX")
 
 
 def test_adx_update(adx_df: pd.DataFrame, evaluate: Eval):
@@ -21,6 +19,6 @@ def test_adx_update(adx_df: pd.DataFrame, evaluate: Eval):
 
     evaluate(
         adx_df["adx"].to_numpy(dtype=np.float64),
-        rolling.adx().to_numpy(dtype=np.float64),
-        name="NUMBA_ADX_UPDATE",
+        rolling.to_numpy(dtype=np.float64),
+        "ADX_UPDATE",
     )

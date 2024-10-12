@@ -1,11 +1,8 @@
 from array import array
-from typing import Deque
-from collections import deque
+from typing import Literal
 
 import numpy as np
 import pandas as pd
-
-import numba as nb
 
 from rolling_ta.extras.numba import _sma, _sma_update
 from rolling_ta.indicator import Indicator
@@ -53,6 +50,7 @@ class SMA(Indicator):
             self._sma = array("f", sma)
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
 
@@ -70,10 +68,25 @@ class SMA(Indicator):
         if self._memory:
             self._sma.append(latest)
 
-    def sma(self):
-        if not self._memory:
-            raise MemoryError("SMA._memory = False")
-        return pd.Series(self._sma)
-
     def sma_latest(self):
         return self._sma_latest
+
+    def to_array(self, get: Literal["sma"] = "sma"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["sma"] = "sma",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["sma"] = "sma",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)

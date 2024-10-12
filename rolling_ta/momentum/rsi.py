@@ -1,5 +1,5 @@
 from array import array
-from typing import Deque
+from typing import Deque, Literal, Union
 import numpy as np
 import pandas as pd
 
@@ -69,6 +69,7 @@ class RSI(Indicator):
         self._close_p = close_p
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
         close = data["close"]
@@ -88,5 +89,22 @@ class RSI(Indicator):
         self._avg_loss = avg_loss
         self._close_p = close
 
-    def rsi(self):
-        return pd.Series(self._rsi)
+    def to_array(self, get: Literal["rsi"] = "rsi"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["rsi"] = "rsi",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["rsi"] = "rsi",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)

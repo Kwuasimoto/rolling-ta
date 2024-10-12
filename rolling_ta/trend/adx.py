@@ -7,7 +7,7 @@ from rolling_ta.trend import DMI, DMI
 import pandas as pd
 import numpy as np
 
-from typing import Optional, Union
+from typing import Literal, Optional, Union
 
 
 class ADX(Indicator):
@@ -33,11 +33,11 @@ class ADX(Indicator):
             self.init()
 
     def init(self):
-        if not self._init:
+        if not self._dmi._initialized:
             self._dmi.init()
 
-        pdmi = self._dmi.pdmi().to_numpy(np.float64)
-        ndmi = self._dmi.ndmi().to_numpy(np.float64)
+        pdmi = self.to_numpy(get="pdmi", dtype=np.float64)
+        ndmi = self.to_numpy(get="ndmi", dtype=np.float64)
 
         dx, dx_p = _dx(
             pdmi,
@@ -55,11 +55,13 @@ class ADX(Indicator):
 
         if self._memory:
             self._adx = array("f", adx)
+            self._dx = array("f", dx)
 
         self._dx_p = dx_p
         self._adx_p = adx_p
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: Series):
         self._dmi.update(data)
@@ -78,8 +80,43 @@ class ADX(Indicator):
         if self._memory:
             self._adx.append(self._adx_p)
 
-    def adx(self):
-        return pd.Series(self._adx)
+    def to_array(self, get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx"):
+        if get == "pdmi":
+            return self._dmi.to_array(get)
+        elif get == "ndmi":
+            return self._dmi.to_array(get)
+        elif get == "tr":
+            return self._dmi._tr.to_array(get)
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        if get == "pdmi":
+            return self._dmi.to_numpy(get, dtype, **kwargs)
+        elif get == "ndmi":
+            return self._dmi.to_numpy(get, dtype, **kwargs)
+        elif get == "tr":
+            return self._dmi._tr.to_numpy(get, dtype, **kwargs)
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        if get == "pdmi":
+            return self._dmi.to_series(get, dtype, name, **kwargs)
+        elif get == "ndmi":
+            return self._dmi.to_series(get, dtype, name, **kwargs)
+        elif get == "tr":
+            return self._dmi._tr.to_series(get, dtype, name, **kwargs)
+        return super().to_series(get, dtype, name, **kwargs)
 
     def adx_latest(self):
         return self._adx_p

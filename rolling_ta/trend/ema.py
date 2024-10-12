@@ -1,10 +1,10 @@
 from array import array
+from typing import Literal
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _ema, _ema_update
 from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
 
 
 class EMA(Indicator):
@@ -30,6 +30,7 @@ class EMA(Indicator):
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
         self._weight = weight / (period_config + 1)
+
         if self._init:
             self.init()
 
@@ -47,9 +48,10 @@ class EMA(Indicator):
         self._ema_latest = ema_latest
 
         if self._memory:
-            self._ema = array("f", ema)
+            self._ema = array("d", ema)
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
         self._ema_latest = _ema_update(data["close"], self._weight, self._ema_latest)
@@ -57,7 +59,22 @@ class EMA(Indicator):
         if self._memory:
             self._ema.append(self._ema_latest)
 
-    def ema(self):
-        if not self._memory:
-            raise MemoryError("NumbaEMA._memory = False")
-        return pd.Series(self._ema)
+    def to_array(self, get: Literal["ema"] = "ema"):
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["ema"] = "ema",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["ema"] = "ema",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        return super().to_series(get, dtype, name, **kwargs)

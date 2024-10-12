@@ -42,6 +42,47 @@ def ema_df(xls_loader: XLSXLoader):
         pytest.fail(str(fnfe))
 
 
+@pytest.fixture(name="wma_df")
+def wma_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-wma.xlsx",
+            columns=[
+                "ts",
+                "close",
+                "weights",
+                "weighted_sum",
+                "wma",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="hma_df")
+def hma_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-hma.xlsx",
+            columns=[
+                "ts",
+                "close",
+                "weights",
+                "wma_sqrt_sum",
+                "wma_sqrt",
+                "wma_half_sum",
+                "wma_half",
+                "wma_full_sum",
+                "wma_full",
+                "hma_raw",
+                "hma_raw_sum",
+                "hma",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
 @pytest.fixture(name="rsi_df")
 def rsi_df(xls_loader: XLSXLoader):
     try:
@@ -55,13 +96,74 @@ def rsi_df(xls_loader: XLSXLoader):
                 "gain_14",
                 "loss_14",
                 "rsi",
+                "rsi_min_14",
+                "rsi_max_14",
+                "stoch_rsi",
+                "stoch_k",
+                "stoch_d",
             ],
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
 
 
-# Used in TrueRange tests.
+@pytest.fixture(name="bb_df")
+def bb_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-bb.xlsx",
+            columns=[
+                "ts",
+                "close",
+                "sma",
+                "upper",
+                "lower",
+            ],
+        ).copy()
+
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="bop_df")
+def bop_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-bop.xlsx",
+            columns=[
+                "ts",
+                "open",
+                "high",
+                "low",
+                "close",
+                "bop",
+                "bop_14",
+            ],
+        ).copy()
+
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="donchian_channels_df")
+def donchian_channels_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-donchian.xlsx",
+            columns=[
+                "ts",
+                "high",
+                "low",
+                "highs",
+                "lows",
+                "centers",
+            ],
+        ).copy()
+
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
 @pytest.fixture(name="atr_df")
 def atr_df(xls_loader: XLSXLoader):
     try:
@@ -134,6 +236,28 @@ def ichimoku_cloud_df(xls_loader: XLSXLoader):
         pytest.fail(str(fnfe))
 
 
+@pytest.fixture(name="lr_df")
+def lr_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-linear_regression.xlsx",
+            columns=[
+                "ts",
+                "high",
+                "low",
+                "close",
+                "typical",
+                "row",
+                "intercepts",
+                "slopes",
+                "r2",
+                "forecast",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
 @pytest.fixture(name="mfi_df")
 def mfi_df(xls_loader: XLSXLoader):
     try:
@@ -152,6 +276,28 @@ def mfi_df(xls_loader: XLSXLoader):
                 "pmf_sum_14",
                 "nmf_sum_14",
                 "mfi",
+            ],
+        ).copy()
+    except FileNotFoundError as fnfe:
+        pytest.fail(str(fnfe))
+
+
+@pytest.fixture(name="vwap_df")
+def vwap_df(xls_loader: XLSXLoader):
+    try:
+        return xls_loader.read_resource(
+            "btc-vwap.xlsx",
+            columns=[
+                "timestamp",
+                "timestamp_mod",
+                "high",
+                "low",
+                "close",
+                "typical",
+                "volume",
+                "raw_accum",
+                "vol_accum",
+                "vwap",
             ],
         ).copy()
     except FileNotFoundError as fnfe:

@@ -8,7 +8,7 @@ from rolling_ta.volatility import TR
 import pandas as pd
 import numpy as np
 
-from typing import Optional
+from typing import Literal, Optional
 
 
 class ATR(Indicator):
@@ -48,7 +48,7 @@ class ATR(Indicator):
         if not self._init:
             self._tr.init()
 
-        tr = self._tr.tr().to_numpy(dtype=np.float64)
+        tr = self._tr.to_numpy(dtype=np.float64)
         atr = np.zeros(tr.size, dtype=np.float64)
 
         self._atr, latest = _atr(
@@ -64,6 +64,7 @@ class ATR(Indicator):
             self._atr = array("d", self._atr)
 
         self.drop_data()
+        self.set_initialized()
 
     def update(self, data: pd.Series):
 
@@ -79,5 +80,28 @@ class ATR(Indicator):
         if self._memory:
             self._atr.append(self._atr_latest)
 
-    def atr(self):
-        return pd.Series(self._atr)
+    def to_array(self, get: Literal["atr", "tr"] = "atr"):
+        if get == "tr":
+            return self._tr.to_array(get)
+        return super().to_array(get)
+
+    def to_numpy(
+        self,
+        get: Literal["atr", "tr"] = "atr",
+        dtype: np.dtype | None = np.float64,
+        **kwargs,
+    ):
+        if get == "tr":
+            return self._tr.to_numpy(get, dtype**kwargs)
+        return super().to_numpy(get, dtype, **kwargs)
+
+    def to_series(
+        self,
+        get: Literal["atr", "tr"] = "atr",
+        dtype: type | None = float,
+        name: str | None = None,
+        **kwargs,
+    ):
+        if get == "tr":
+            return self._tr.to_series(get, dtype, name, **kwargs)
+        return super().to_series(get, dtype, name, **kwargs)

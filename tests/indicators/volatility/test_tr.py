@@ -7,11 +7,9 @@ from rolling_ta.volatility import TR
 
 
 def test_tr(atr_df: pd.DataFrame, evaluate: Eval):
-    evaluate(
-        atr_df["tr"].to_numpy(dtype=np.float64),
-        TR(atr_df).tr().to_numpy(dtype=np.float64),
-        name="NUMBA_TR",
-    )
+    expected = atr_df["tr"].to_numpy(dtype=np.float64)
+    rolling = TR(atr_df).to_numpy(dtype=np.float64)
+    evaluate(expected, rolling, "TR")
 
 
 def test_tr_update(atr_df: pd.DataFrame, evaluate: Eval):
@@ -22,6 +20,6 @@ def test_tr_update(atr_df: pd.DataFrame, evaluate: Eval):
 
     evaluate(
         atr_df["tr"].to_numpy(dtype=np.float64),
-        rolling.tr().to_numpy(dtype=np.float64),
-        name="NUMBA_TR_UPDATE",
+        rolling.to_numpy(dtype=np.float64),
+        "TR_UPDATE",
     )
