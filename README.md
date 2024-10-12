@@ -179,6 +179,7 @@ _Expected Updates for 0.9_
   - Linear Regression Indicator (LRI)
   - Linear Regression Forecast (LRF)
   - Linear Regression R2 (lr2)
+- Maybe migrate pandas to polars and test GPU vectoring speed?
 
 ## Contributing
 
