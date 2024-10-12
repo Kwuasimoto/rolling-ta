@@ -1,6 +1,6 @@
 [project]
 name = "rolling_ta"
-version = "0.8.2"
+version = "0.8.3"
 authors = [
     {name="Kwuasimoto", email="thomasdouglasshank@gmail.com"}
 ]
