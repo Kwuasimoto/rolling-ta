@@ -3,6 +3,7 @@ from typing import Dict, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
+
 from rolling_ta.extras.numba import _wma
 from rolling_ta.indicator import Indicator
 

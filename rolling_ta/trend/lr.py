@@ -1,7 +1,9 @@
 from array import array
 from typing import Dict, Literal, Optional
+
 import numpy as np
-from pandas import DataFrame, Series
+import pandas as pd
+
 from rolling_ta.extras.numba import _typical_price, _linear_regression
 from rolling_ta.indicator import Indicator
 
@@ -10,7 +12,7 @@ class LinearRegression(Indicator):
 
     def __init__(
         self,
-        data: Optional[DataFrame] = None,
+        data: Optional[pd.DataFrame] = None,
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
         retention: Optional[int] = None,
@@ -41,7 +43,7 @@ class LinearRegression(Indicator):
         self.drop_data()
         self.set_initialized()
 
-    def update(self, data: Series):
+    def update(self, data: pd.Series):
         super().update(data, __name__)
 
     def to_array(self, get: Literal["slope", "intercept", "price"] = "slope"):

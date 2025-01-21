@@ -1,6 +1,9 @@
 from array import array
 from typing import Literal, Optional
-from pandas import DataFrame
+
+import pandas as pd
+import numpy as np
+
 from rolling_ta.extras.numba import (
     _mf_pos_neg,
     _mf_pos_neg_sum,
@@ -11,10 +14,7 @@ from rolling_ta.extras.numba import (
     _typical_price,
     _typical_price_single,
 )
-
 from rolling_ta.indicator import Indicator
-import pandas as pd
-import numpy as np
 
 
 class MFI(Indicator):
@@ -34,7 +34,7 @@ class MFI(Indicator):
 
     def __init__(
         self,
-        data: Optional[DataFrame] = None,
+        data: Optional[pd.DataFrame] = None,
         period: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,

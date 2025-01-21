@@ -1,20 +1,20 @@
+from typing import Literal, Optional
 from array import array
-from pandas import DataFrame, Series
+
+import pandas as pd
+import numpy as np
+
 from rolling_ta.extras.numba import _dx, _adx, _dx_update, _adx_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TR
 from rolling_ta.trend import DMI, DMI
-import pandas as pd
-import numpy as np
-
-from typing import Literal, Optional
 
 
 class ADX(Indicator):
 
     def __init__(
         self,
-        data: Optional[DataFrame] = None,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
@@ -63,7 +63,7 @@ class ADX(Indicator):
         self.drop_data()
         self.set_initialized()
 
-    def update(self, data: Series):
+    def update(self, data: pd.Series):
         self._dmi.update(data)
 
         self._dx_p = _dx_update(

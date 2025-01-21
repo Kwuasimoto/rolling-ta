@@ -1,11 +1,11 @@
 from array import array
-from rolling_ta.extras.numba import _obv, _obv_update
-from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
 from typing import Literal, Optional, Union, Dict
 
 import pandas as pd
 import numpy as np
+
+from rolling_ta.extras.numba import _obv, _obv_update
+from rolling_ta.indicator import Indicator
 
 
 class OBV(Indicator):

@@ -1,5 +1,6 @@
 from array import array
 from typing import Dict, Literal, Optional
+
 import numpy as np
 import pandas as pd
 
@@ -13,7 +14,6 @@ from rolling_ta.extras.numba import (
     _tenkan,
     _tenkan_update,
 )
-
 from rolling_ta.indicator import Indicator
 
 

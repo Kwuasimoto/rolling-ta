@@ -1,7 +1,8 @@
 from array import array
+from typing import Dict, Literal, Optional
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Literal, Optional
 
 from rolling_ta.extras.numba import _bollinger_bands
 from rolling_ta.trend.sma import SMA

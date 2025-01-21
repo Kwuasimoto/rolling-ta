@@ -1,8 +1,6 @@
 from array import array
 from typing import Dict, Literal, Optional
 
-from numpy import dtype
-
 import pandas as pd
 import numpy as np
 
@@ -52,7 +50,7 @@ class DonchianChannels(Indicator):
     def to_numpy(
         self,
         get: Literal["high", "low", "center"] = "high",
-        dtype: dtype | None = np.float64,
+        dtype: np.dtype | None = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)

@@ -1,12 +1,12 @@
 from array import array
-from collections import deque
-from typing import Dict, Literal, Optional, Union
+from typing import Dict, Literal, Optional
 
 import numpy as np
+import pandas as pd
+
 from rolling_ta.extras.numba import _stoch_k, _stoch_d
 from rolling_ta.indicator import Indicator
 from rolling_ta.momentum import RSI, RSI
-import pandas as pd
 
 
 class StochasticRSI(Indicator):

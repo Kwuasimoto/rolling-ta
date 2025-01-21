@@ -1,5 +1,9 @@
 from array import array
 from typing import Literal, Optional
+
+import pandas as pd
+import numpy as np
+
 from rolling_ta.extras.numba import (
     _dm,
     _dm_update,
@@ -10,8 +14,6 @@ from rolling_ta.extras.numba import (
 )
 from rolling_ta.indicator import Indicator
 from rolling_ta.volatility import TR
-import pandas as pd
-import numpy as np
 
 
 class DMI(Indicator):

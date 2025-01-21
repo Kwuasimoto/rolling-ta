@@ -1,14 +1,12 @@
 from array import array
-from pandas import DataFrame
-from rolling_ta.indicator import Indicator
-from rolling_ta.extras.numba import _atr, _atr_update
-from rolling_ta.volatility import TR
-
+from typing import Literal, Optional
 
 import pandas as pd
 import numpy as np
 
-from typing import Literal, Optional
+from rolling_ta.indicator import Indicator
+from rolling_ta.extras.numba import _atr, _atr_update
+from rolling_ta.volatility import TR
 
 
 class ATR(Indicator):
@@ -31,7 +29,7 @@ class ATR(Indicator):
 
     def __init__(
         self,
-        data: Optional[DataFrame] = None,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,

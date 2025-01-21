@@ -1,10 +1,11 @@
 from array import array
-from typing import Literal, Optional, Union
-from rolling_ta.extras.numba import _tr, _tr_update
-from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
+from typing import Literal, Optional
+
 import pandas as pd
 import numpy as np
+
+from rolling_ta.extras.numba import _tr, _tr_update
+from rolling_ta.indicator import Indicator
 
 
 class TR(Indicator):

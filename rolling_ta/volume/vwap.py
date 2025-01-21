@@ -3,6 +3,7 @@ from typing import Dict, Literal, Optional
 
 import pandas as pd
 import numpy as np
+
 from rolling_ta.extras.numba import _typical_price, _vwap
 from rolling_ta.indicator import Indicator
 

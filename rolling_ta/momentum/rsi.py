@@ -1,5 +1,6 @@
 from array import array
 from typing import Literal, Optional
+
 import numpy as np
 import pandas as pd
 
