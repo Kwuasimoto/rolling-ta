@@ -19,7 +19,7 @@ class StochasticRSI(Indicator):
         period_config: Dict[str, int] = {"rsi": 14, "stoch": 10, "k": 3, "d": 3},
         memory: bool = True,
         retention: Optional[None] = None,
-        init: bool = True,
+        init: bool = False,
         rsi: Optional[RSI] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

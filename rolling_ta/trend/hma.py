@@ -17,7 +17,7 @@ class HMA(Indicator):
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
         wma_full: Optional[WMA] = None,
         wma_half: Optional[WMA] = None,
     ) -> None:

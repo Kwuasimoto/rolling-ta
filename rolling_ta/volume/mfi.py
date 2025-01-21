@@ -38,7 +38,7 @@ class MFI(Indicator):
         period: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         super().__init__(data, period, memory, retention, init)
 

@@ -51,7 +51,7 @@ class IchimokuCloud(Indicator):
         period_config: Dict[str, int] = {"tenkan": 9, "kijun": 26, "senkou": 52},
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 

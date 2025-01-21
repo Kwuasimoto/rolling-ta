@@ -15,7 +15,7 @@ class OBV(Indicator):
         period_config: Union[Dict[str, int], None] = None,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
         if self._init:

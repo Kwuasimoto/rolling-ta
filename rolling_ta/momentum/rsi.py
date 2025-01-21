@@ -28,7 +28,7 @@ class RSI(Indicator):
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         """
         Initialize the RSI indicator.

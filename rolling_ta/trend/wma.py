@@ -16,7 +16,7 @@ class WMA(Indicator):
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 

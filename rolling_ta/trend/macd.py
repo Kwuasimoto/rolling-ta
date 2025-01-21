@@ -11,7 +11,7 @@ class MACD(Indicator):
         period_config: Dict[str, int] = {"fast": 12, "slow": 26, "smoothing": 9},
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 

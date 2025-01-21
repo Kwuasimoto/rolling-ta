@@ -28,7 +28,7 @@ class BollingerBands(Indicator):
         period_config: int | Dict[str, int] = 20,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
         moving_average: Optional[Indicator] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

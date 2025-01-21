@@ -23,7 +23,7 @@ class DMI(Indicator):
         period: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
-        init: bool = True,
+        init: bool = False,
         tr: Optional[TR] = None,
     ) -> None:
         super().__init__(data, period, memory, retention, init)
