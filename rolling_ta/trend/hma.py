@@ -13,10 +13,10 @@ class HMA(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
-        retention: int | None = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
         wma_full: Optional[WMA] = None,
         wma_half: Optional[WMA] = None,

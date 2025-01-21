@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -26,10 +26,10 @@ class SMA(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

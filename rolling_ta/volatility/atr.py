@@ -31,10 +31,10 @@ class ATR(Indicator):
 
     def __init__(
         self,
-        data: DataFrame,
+        data: Optional[DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
         true_range: Optional[TR] = None,
     ) -> None:

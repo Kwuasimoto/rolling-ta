@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal
+from typing import Literal, Optional
 from pandas import DataFrame
 from rolling_ta.extras.numba import (
     _mf_pos_neg,
@@ -34,10 +34,10 @@ class MFI(Indicator):
 
     def __init__(
         self,
-        data: DataFrame,
+        data: Optional[DataFrame] = None,
         period: int = 14,
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period, memory, retention, init)

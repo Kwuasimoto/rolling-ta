@@ -1,16 +1,16 @@
 import pandas as pd
 from rolling_ta.indicator import Indicator
-from typing import Dict
+from typing import Dict, Optional
 
 
 class MACD(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: Dict[str, int] = {"fast": 12, "slow": 26, "smoothing": 9},
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

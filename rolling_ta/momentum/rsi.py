@@ -1,13 +1,10 @@
 from array import array
-from typing import Deque, Literal, Union
+from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _rsi, _rsi_update
 from rolling_ta.indicator import Indicator
-from rolling_ta.logging import logger
-
-from collections import deque
 
 
 class RSI(Indicator):
@@ -26,10 +23,10 @@ class RSI(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         """

@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 import numpy as np
 from pandas import DataFrame, Series
 
@@ -14,12 +14,12 @@ class LinearRegressionR2(Indicator):
 
     def __init__(
         self,
-        data: DataFrame,
+        data: Optional[DataFrame] = None,
         period_config: int | Dict[str, int] = {"lr": 14, "lr2": 14},
         memory: bool = True,
-        retention: int | None = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
-        lr: LinearRegression | None = None,
+        lr: Optional[LinearRegression] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 

@@ -3,8 +3,6 @@ import numpy as np
 import pandas as pd
 from typing import Dict, Literal, Optional
 
-from rolling_ta.logging import logger
-
 from rolling_ta.extras.numba import _bollinger_bands
 from rolling_ta.trend.sma import SMA
 from rolling_ta.indicator import Indicator
@@ -25,10 +23,10 @@ class BollingerBands(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int | Dict[str, int] = 20,
         memory: bool = True,
-        retention: int | None = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
         moving_average: Optional[Indicator] = None,
     ) -> None:

@@ -2,7 +2,7 @@ from array import array
 from rolling_ta.extras.numba import _obv, _obv_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
-from typing import Literal, Union, Dict
+from typing import Literal, Optional, Union, Dict
 
 import pandas as pd
 import numpy as np
@@ -11,10 +11,10 @@ import numpy as np
 class OBV(Indicator):
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: Union[Dict[str, int], None] = None,
         memory: bool = True,
-        retention: Union[int, None] = None,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Union
+from typing import Literal, Optional, Union
 from rolling_ta.extras.numba import _tr, _tr_update
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import logger
@@ -11,10 +11,10 @@ class TR(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
-        retention: Union[int, None] = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

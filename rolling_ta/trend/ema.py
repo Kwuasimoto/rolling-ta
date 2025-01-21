@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal
+from typing import Literal, Optional
 import numpy as np
 import pandas as pd
 
@@ -21,12 +21,12 @@ class EMA(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int = 14,
-        weight: np.float64 = 2.0,
         memory: bool = True,
-        retention: int = 20000,
-        init: bool = True,
+        retention: Optional[int] = None,
+        init: bool = False,
+        weight: np.float64 = 2.0,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
         self._weight = weight / (period_config + 1)

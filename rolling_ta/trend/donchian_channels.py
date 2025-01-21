@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal
+from typing import Dict, Literal, Optional
 
 from numpy import dtype
 
@@ -14,10 +14,10 @@ class DonchianChannels(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
-        retention: int | None = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

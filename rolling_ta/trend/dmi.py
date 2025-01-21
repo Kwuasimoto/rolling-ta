@@ -13,16 +13,14 @@ from rolling_ta.volatility import TR
 import pandas as pd
 import numpy as np
 
-from rolling_ta.logging import logger
-
 
 class DMI(Indicator):
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period: int = 14,
         memory: bool = True,
-        retention: int = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
         tr: Optional[TR] = None,
     ) -> None:

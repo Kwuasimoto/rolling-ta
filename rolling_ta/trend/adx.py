@@ -7,17 +7,17 @@ from rolling_ta.trend import DMI, DMI
 import pandas as pd
 import numpy as np
 
-from typing import Literal, Optional, Union
+from typing import Literal, Optional
 
 
 class ADX(Indicator):
 
     def __init__(
         self,
-        data: DataFrame,
+        data: Optional[DataFrame] = None,
         period_config: int = 14,
         memory: bool = True,
-        retention: Union[int, None] = None,
+        retention: Optional[int] = None,
         init: bool = True,
         dmi: Optional[DMI] = None,
         tr: Optional[TR] = None,
@@ -80,7 +80,7 @@ class ADX(Indicator):
         if self._memory:
             self._adx.append(self._adx_p)
 
-    def to_array(self, get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx"):
+    def to_array(self, get: Literal["adx", "dx", "pdmi", "ndmi", "tr"] = "adx"):
         if get == "pdmi":
             return self._dmi.to_array(get)
         elif get == "ndmi":
@@ -91,7 +91,7 @@ class ADX(Indicator):
 
     def to_numpy(
         self,
-        get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx",
+        get: Literal["adx", "dx", "pdmi", "ndmi", "tr"] = "adx",
         dtype: np.dtype | None = np.float64,
         **kwargs,
     ):
@@ -105,7 +105,7 @@ class ADX(Indicator):
 
     def to_series(
         self,
-        get: Literal["adx", "dx", "pdmi", "ndmi" "tr"] = "adx",
+        get: Literal["adx", "dx", "pdmi", "ndmi", "tr"] = "adx",
         dtype: type | None = float,
         name: str | None = None,
         **kwargs,

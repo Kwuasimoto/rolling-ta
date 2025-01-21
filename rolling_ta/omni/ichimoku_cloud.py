@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Union
+from typing import Dict, Literal, Optional
 import numpy as np
 import pandas as pd
 
@@ -47,10 +47,10 @@ class IchimokuCloud(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: Dict[str, int] = {"tenkan": 9, "kijun": 26, "senkou": 52},
         memory: bool = True,
-        retention: Union[int, None] = 20000,
+        retention: Optional[int] = None,
         init: bool = True,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)

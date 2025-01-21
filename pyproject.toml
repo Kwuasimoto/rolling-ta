@@ -1,11 +1,11 @@
 [project]
 name = "rolling_ta"
-version = "0.8.3"
+version = "0.8.4"
 authors = [
     {name="Kwuasimoto", email="thomasdouglasshank@gmail.com"}
 ]
 description = "Simple, single responsibility API for fast technical indicator calculations and incrementation."
-dependencies = ["pandas==2.2.2", "numba==0.60.0", "python-dotenv==1.0.1"]
+dependencies = ["pandas", "numba", "python-dotenv"]
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -18,7 +18,7 @@ packages = ["rolling_ta"]
 Homepage = "https://github.com/Kwuasimoto/rolling-ta"
 
 [project.optional-dependencies]
-dev = ["black"]
+dev = ["black", "openpyxl"]
 
 [build-system]
 requires = ["hatchling"]

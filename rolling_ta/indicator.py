@@ -1,10 +1,45 @@
+from enum import Enum
 import numpy as np
 import pandas as pd
-from typing import Literal, Union, Dict
+from typing import Literal, Optional, Union, Dict
+
+
+class IndicatorID(Enum):
+    # Momentum (1xxx - 1999)
+    bop = 1000
+    rsi = 1001
+    stoch_rsi = 1002
+
+    # Trend (2xxx - 2999)
+    adx = 2000
+    dmi = 2001
+    donchian = 2002
+    ema = 2003
+    hma = 2004
+    lr = 2005
+    lrf = 2006
+    lrr = 2007
+    macd = 2008
+    sma = 2009
+    wma = 2010
+
+    # Volatility (3xxx - 3999)
+    atr = 3000
+    bb = 3001
+    tr = 3002
+
+    # Volume (4xxx - 4999)
+    mfi = 4000
+    obv = 4001
+    vwap = 4002
+
+    # Omni (5xxx - 5999)
+    ichimoku_cloud = 5000
 
 
 class Indicator:
 
+    _id: IndicatorID
     _data: pd.DataFrame
     _period_config: Union[int, Dict[str, int]]
     _period_default: Union[int, Dict[str, int]] = None  # Set by the subclass
@@ -14,40 +49,58 @@ class Indicator:
     _initialized: bool = False
     _count = 0
 
+    def get_config(self, key: str = None):
+        cfg = {
+            "id": self._id,
+            "period_config": self._period_config,
+            "memory": self._memory,
+            "retention": self._retention,
+            "init": self._init,
+            "count": self._count,
+        }
+        if key is None:
+            return cfg
+        return cfg[key]
+
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame],
         period_config: Union[int, Dict[str, int]],
         memory: bool,
         retention: Union[int, None],
         init: bool,
     ) -> None:
-
-        # Check if _period_default set
-        if self._period_default is not None:
-            if isinstance(period_config, Dict):
-                for k, v in self._period_default.items():
-                    if k not in period_config:
-                        period_config[k] = v
-
-        # Validate period input
-        if isinstance(period_config, int):
-            if len(data) < period_config:
-                raise ValueError(
-                    "len(data) must be greater than, or equal to the period."
-                )
-        elif isinstance(period_config, dict):
-            for [key, period] in period_config.items():
-                if len(data) < period:
-                    raise ValueError(
-                        f"len(data) must be greater than, or equal to each period. \n[Key={key}, Period={period}, Data_Len={len(data)}]"
-                    )
+        if data is None:
+            self.fit(data)
 
         self._data = data
         self._period_config = period_config
         self._memory = memory
         self._retention = retention
         self._init = init
+
+    def fit(self, data: pd.DataFrame):
+        # Check if _period_default set
+        if self._period_default is not None:
+            if isinstance(self._period_config, Dict):
+                for k, v in self._period_default.items():
+                    if k not in self._period_config:
+                        self._period_config[k] = v
+
+        # Validate period input
+        if isinstance(self._period_config, int):
+            if len(data) < self._period_config:
+                raise ValueError(
+                    "len(data) must be greater than, or equal to the period."
+                )
+        elif isinstance(self._period_config, dict):
+            for [key, period] in self._period_config.items():
+                if len(data) < period:
+                    raise ValueError(
+                        f"len(data) must be greater than, or equal to each period. \n[Key={key}, Period={period}, Data_Len={len(data)}]"
+                    )
+
+        self._data = data
 
     def period(self, key: Union[str, None] = None):
         if key is not None and key not in self._period_config:
@@ -67,9 +120,6 @@ class Indicator:
         )
 
     def apply_retention(self): ...
-
-    def set_data(self, data: pd.DataFrame):
-        self._data = data
 
     def set_initialized(self, state=True):
         self._initialized = state

@@ -1,6 +1,6 @@
 from array import array
 from collections import deque
-from typing import Dict, Literal, Union
+from typing import Dict, Literal, Optional, Union
 
 import numpy as np
 from rolling_ta.extras.numba import _stoch_k, _stoch_d
@@ -15,12 +15,12 @@ class StochasticRSI(Indicator):
 
     def __init__(
         self,
-        data: pd.DataFrame,
+        data: Optional[pd.DataFrame] = None,
         period_config: Dict[str, int] = {"rsi": 14, "stoch": 10, "k": 3, "d": 3},
         memory: bool = True,
-        retention: Union[int | None] = 20000,
+        retention: Optional[None] = None,
         init: bool = True,
-        rsi: Union[RSI | None] = None,
+        rsi: Optional[RSI] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
 

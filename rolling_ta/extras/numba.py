@@ -65,11 +65,10 @@ def _prefix_sum(arr: np.ndarray[f8]) -> np.ndarray[f8]:
     nogil=NUMBA_NOGIL,
 )
 def _mean(arr: np.ndarray[f8]) -> f8:
-    n = arr.size
     sum: f8 = 0.0
-    for i in nb.prange(n):
+    for i in nb.prange(arr.size):
         sum += arr[i]
-    return sum / n
+    return sum / arr.size
 
 
 @nb.njit(parallel=True, nogil=True, fastmath=True, cache=True, inline="always")
