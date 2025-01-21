@@ -37,7 +37,11 @@ class ATR(Indicator):
         true_range: Optional[TR] = None,
     ) -> None:
         super().__init__(data, period_config, memory, retention, init)
-        self._tr = TR(data, period_config) if true_range is None else true_range
+        self._tr = (
+            TR(data, period_config, memory, retention, init)
+            if true_range is None
+            else true_range
+        )
         self._n_1 = self._period_config - 1
         if self._init:
             self.init()

@@ -7,5 +7,5 @@ from tests.fixtures.eval import Eval
 
 def test_wma(wma_df: pd.DataFrame, evaluate: Eval):
     expected = wma_df["wma"].to_numpy(dtype=np.float64)
-    rolling = WMA(wma_df).to_numpy()
+    rolling = WMA(data=wma_df, init=True).to_numpy()
     evaluate(expected, rolling, "WMA")

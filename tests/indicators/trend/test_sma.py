@@ -8,12 +8,12 @@ from rolling_ta.trend import SMA
 
 def test_sma(sma_df: pd.DataFrame, evaluate: Eval):
     expected = sma_df["sma"].to_numpy(dtype=np.float64)
-    rolling = SMA(sma_df).to_numpy(dtype=np.float64)
+    rolling = SMA(data=sma_df, init=True).to_numpy(dtype=np.float64)
     evaluate(expected, rolling, "SMA")
 
 
 def test_sma_update(sma_df: pd.DataFrame, evaluate: Eval):
-    rolling = SMA(sma_df.iloc[:20])
+    rolling = SMA(data=sma_df.iloc[:20], init=True)
 
     for _, series in sma_df.iloc[20:].iterrows():
         rolling.update(series)

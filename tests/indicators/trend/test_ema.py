@@ -7,12 +7,12 @@ from rolling_ta.trend import EMA
 
 def test_ema(ema_df: pd.DataFrame, evaluate: Eval):
     expected = ema_df["ema"].to_numpy(dtype=np.float64)
-    rolling = EMA(ema_df).to_numpy(dtype=np.float64)
+    rolling = EMA(data=ema_df, init=True).to_numpy(dtype=np.float64)
     evaluate(expected, rolling, "EMA")
 
 
 def test_ema_update(ema_df: pd.DataFrame, evaluate: Eval):
-    rolling = EMA(ema_df.iloc[:20])
+    rolling = EMA(data=ema_df.iloc[:20], init=True)
 
     for _, series in ema_df.iloc[20:].iterrows():
         rolling.update(series)

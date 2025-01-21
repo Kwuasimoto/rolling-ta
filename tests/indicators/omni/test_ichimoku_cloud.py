@@ -7,7 +7,7 @@ from rolling_ta.omni import IchimokuCloud
 
 def test_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    rolling = IchimokuCloud(ichimoku_cloud_df)
+    rolling = IchimokuCloud(data=ichimoku_cloud_df, init=True)
 
     evaluate(
         ichimoku_cloud_df["tenkan"].to_numpy(dtype=np.float64),
@@ -33,7 +33,7 @@ def test_ichimoku_cloud(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
 def test_ichimoku_cloud_update(ichimoku_cloud_df: pd.DataFrame, evaluate: Eval):
 
-    rolling = IchimokuCloud(ichimoku_cloud_df.iloc[:100])
+    rolling = IchimokuCloud(data=ichimoku_cloud_df.iloc[:100], init=True)
 
     for _, series in ichimoku_cloud_df.iloc[100:].iterrows():
         rolling.update(series)
