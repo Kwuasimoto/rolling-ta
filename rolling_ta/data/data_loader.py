@@ -1,9 +1,7 @@
 class DataLoader:
 
+    _index = ["Timestamp", "timestamp", "ts"]
     _headers = [
-        "Timestamp",
-        "timestamp",
-        "ts",
         "Close",
         "close",
         "c",

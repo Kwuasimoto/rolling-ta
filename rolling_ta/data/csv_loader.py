@@ -12,11 +12,21 @@ class CSVLoader(DataLoader):
         self,
         file_name: str = "btc_ohlcv.csv",
         columns=["timestamp", "open", "high", "low", "close", "volume"],
+        index=["timestamp"],
     ):
         log.debug(f"CSVLoader: Loading from resources/{file_name}")
         resources = pkg.files("resources")
         df = pd.read_csv(resources / file_name)
-        return pd.DataFrame(data=df.values, columns=columns)
+        df.columns = columns
+
+        if not set(index).issubset(columns):
+            raise ValueError(
+                f" Index column {index} is not a specified column {columns}"
+            )
+
+        df.set_index(index, inplace=True)
+
+        return df
 
     def read_file(self, path: str):
         raise NotImplementedError("Not implemented yet.")

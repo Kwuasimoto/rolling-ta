@@ -16,7 +16,7 @@ def obv_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
             "btc-obv.xlsx",
-            columns=["ts", "close", "volume", "up", "down", "obv"],
+            columns=["timestamp", "close", "volume", "up", "down", "obv"],
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -26,7 +26,7 @@ def obv_df(xls_loader: XLSXLoader):
 def sma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-sma.xlsx", columns=["ts", "close", "sma"]
+            "btc-sma.xlsx", columns=["timestamp", "close", "sma"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -36,7 +36,7 @@ def sma_df(xls_loader: XLSXLoader):
 def ema_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-ema.xlsx", columns=["ts", "close", "ema"]
+            "btc-ema.xlsx", columns=["timestamp", "close", "ema"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -48,7 +48,7 @@ def wma_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-wma.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "close",
                 "weights",
                 "weighted_sum",
@@ -65,7 +65,7 @@ def hma_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-hma.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "close",
                 "weights",
                 "wma_sqrt_sum",
@@ -89,7 +89,7 @@ def rsi_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-rsi.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "close",
                 "gain",
                 "loss",
@@ -113,7 +113,7 @@ def bb_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-bb.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "close",
                 "sma",
                 "upper",
@@ -131,7 +131,7 @@ def bop_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-bop.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "open",
                 "high",
                 "low",
@@ -151,7 +151,7 @@ def donchian_channels_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-donchian.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "highs",
@@ -170,7 +170,7 @@ def atr_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-atr.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "close",
@@ -189,7 +189,7 @@ def adx_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-adx.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "close",
@@ -217,7 +217,7 @@ def ichimoku_cloud_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-ichimoku_cloud.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "high_max_9",
@@ -242,7 +242,7 @@ def lr_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-linear_regression.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "close",
@@ -264,7 +264,7 @@ def mfi_df(xls_loader: XLSXLoader):
         return xls_loader.read_resource(
             "btc-mfi.xlsx",
             columns=[
-                "ts",
+                "timestamp",
                 "high",
                 "low",
                 "close",

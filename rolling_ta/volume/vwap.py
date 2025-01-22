@@ -24,7 +24,7 @@ class VWAP(Indicator):
             self.init()
 
     def init(self):
-        timestamp = self._data["timestamp"].to_numpy(dtype=np.int64)
+        timestamp = self._data.index.to_numpy(dtype=np.int64)
         volume = self._data["volume"].to_numpy(dtype=np.float64)
 
         high = self._data["high"].to_numpy(dtype=np.float64)
