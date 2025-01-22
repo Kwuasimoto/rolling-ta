@@ -72,9 +72,6 @@ class Indicator:
         retention: Union[int, None],
         init: bool,
     ) -> None:
-        if data is None:
-            self.fit(data)
-
         self._data = data
         self._period_config = period_config
         self._memory = memory
@@ -105,12 +102,13 @@ class Indicator:
         return True
 
     def fit(self, data: pd.DataFrame):
+        log.debug(f"Trying to fit : {data.describe()}")
         # Validate period input
         if self.validate_data(data):
             log.debug(f"Fitting {len(data)} data points.")
             self._data = data
         else:
-            raise ValueError(f"An dataframe incompatible with {self} was supplied!")
+            raise ValueError(f"A dataframe incompatible with {self} was supplied!")
 
     def period(self, key: Union[str, None] = None):
         if key is not None and key not in self._period_config:
