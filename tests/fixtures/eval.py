@@ -1,8 +1,8 @@
-from logging import Logger
 from typing import Callable, Union
 import numpy as np
-import pandas as pd
 import pytest
+
+from tests.logging import log
 
 
 Eval = Callable[
@@ -11,7 +11,7 @@ Eval = Callable[
 
 
 @pytest.fixture(name="evaluate")
-def evaluate(log: Logger):
+def evaluate():
     def e(
         expected: np.ndarray[np.float64],
         rolling: np.ndarray[np.float64],

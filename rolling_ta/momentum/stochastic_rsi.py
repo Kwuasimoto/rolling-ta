@@ -68,6 +68,10 @@ class StochasticRSI(Indicator):
             if stoch_d is not None:
                 self._d = array("d", stoch_d)
 
+    def fit(self, data):
+        super().fit(data)
+        self._rsi.fit(data)
+
     def update(self, data: pd.Series):
         return super().update(data, __name__)
 

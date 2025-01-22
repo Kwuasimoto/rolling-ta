@@ -82,6 +82,10 @@ class ATR(Indicator):
         if self._memory:
             self._atr.append(self._atr_latest)
 
+    def fit(self, data):
+        super().fit(data)
+        self._tr.fit(data)
+
     def to_array(self, get: Literal["atr", "tr"] = "atr"):
         if get == "tr":
             return self._tr.to_array(get)

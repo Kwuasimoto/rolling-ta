@@ -1,13 +1,13 @@
 import numpy as np
 
-from rolling_ta.logging import logger
+from rolling_ta.logging import log
 
 from rolling_ta.data import CSVLoader, XLSXLoader, XLSXWriter
 
 from rolling_ta.trend import LinearRegressionR2, lr
 from tests.fixtures.data_sheets import lr_df
 
-from ta.volume import VolumeWeightedAveragePrice
+# from ta.volume import VolumeWeightedAveragePrice
 
 
 def write_xlsx_file():

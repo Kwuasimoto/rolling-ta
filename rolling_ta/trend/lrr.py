@@ -53,6 +53,10 @@ class LinearRegressionR2(Indicator):
     def update(self, data: pd.Series):
         super().update(data, __name__)
 
+    def fit(self, data):
+        super().fit(data)
+        self._lr.fit(data)
+
     def to_array(self, get: Literal["r2", "slope", "intercept", "price"] = "r2"):
         if get == "slope":
             return self._lr.to_array(get)

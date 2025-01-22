@@ -80,6 +80,10 @@ class ADX(Indicator):
         if self._memory:
             self._adx.append(self._adx_p)
 
+    def fit(self, data):
+        super().fit(data)
+        self._dmi.fit(data)
+
     def to_array(self, get: Literal["adx", "dx", "pdmi", "ndmi", "tr"] = "adx"):
         if get == "pdmi":
             return self._dmi.to_array(get)

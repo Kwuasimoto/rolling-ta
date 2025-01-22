@@ -1,4 +1,3 @@
-from .log import log
 from .eval import evaluate
 from .loaders import csv_loader, xls_loader
 from .data_sheets import (

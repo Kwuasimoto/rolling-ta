@@ -61,6 +61,10 @@ class BollingerBands(Indicator):
         self.drop_data()
         self.set_initialized()
 
+    def fit(self, data):
+        super().fit(data)
+        self._ma.fit(data)
+
     def to_array(self, get: Literal["ma", "upper", "lower"] = "ma"):
         if get == "ma":
             return self._ma.to_array()

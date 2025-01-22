@@ -3,7 +3,7 @@ import importlib.resources as pkg
 import pandas as pd
 
 from rolling_ta.data import DataLoader
-from rolling_ta.logging import logger
+from rolling_ta.logging import log
 
 
 class CSVLoader(DataLoader):
@@ -13,7 +13,7 @@ class CSVLoader(DataLoader):
         file_name: str = "btc_ohlcv.csv",
         columns=["timestamp", "open", "high", "low", "close", "volume"],
     ):
-        logger.debug(f"CSVLoader: Loading from resources/{file_name}")
+        log.debug(f"CSVLoader: Loading from resources/{file_name}")
         resources = pkg.files("resources")
         df = pd.read_csv(resources / file_name)
         return pd.DataFrame(data=df.values, columns=columns)

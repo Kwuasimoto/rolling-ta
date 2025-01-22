@@ -54,6 +54,10 @@ class LinearRegressionForecast(Indicator):
     def update(self, data: pd.Series):
         super().update(data, __name__)
 
+    def fit(self, data):
+        super().fit(data)
+        self._lr.fit(data)
+
     def to_array(
         self, get: Literal["forecast", "slope", "intercept", "price"] = "forecast"
     ):

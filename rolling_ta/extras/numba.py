@@ -11,9 +11,9 @@ from rolling_ta.env import (
     NUMBA_NOGIL,
     NUMBA_FASTMATH,
 )
-from rolling_ta.logging import logger
+from rolling_ta.logging import log
 
-logger.debug(
+log.debug(
     f"Numba environment: [Caching={NUMBA_DISK_CACHING}, Parallel={NUMBA_PARALLEL}, Nogil={NUMBA_NOGIL}, Numba={NUMBA_FASTMATH}]"
 )
 

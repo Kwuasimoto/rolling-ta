@@ -99,6 +99,10 @@ class DMI(Indicator):
             self._pdmi.append(self._pdmi_p)
             self._ndmi.append(self._ndmi_p)
 
+    def fit(self, data):
+        super().fit(data)
+        self._tr.fit(data)
+
     def to_array(self, get: Literal["pdmi", "ndmi", "tr"] = "pdmi"):
         if get == "tr":
             return self._tr.to_array(get)

@@ -59,6 +59,11 @@ class HMA(Indicator):
         self.drop_data()
         self.set_initialized()
 
+    def fit(self, data):
+        super().fit(data)
+        self._wma_half.fit(data)
+        self._wma_full.fit(data)
+
     def to_array(self, get: Literal["hma"] = "hma"):
         return super().to_array(get)
 

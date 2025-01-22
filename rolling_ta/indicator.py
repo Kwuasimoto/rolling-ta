@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 from typing import Literal, Optional, Union, Dict
 
+from rolling_ta.logging import log
+
 
 class IndicatorID(Enum):
     # Momentum (1xxx - 1999)
@@ -41,10 +43,10 @@ class Indicator:
 
     _id: IndicatorID
     _data: pd.DataFrame
-    _period_config: Union[int, Dict[str, int]]
+    _period_config: Union[int, Dict[str, int]] = None
     _period_default: Union[int, Dict[str, int]] = None  # Set by the subclass
     _memory: bool
-    _retention: Union[int, None]
+    _retention: Optional[int]
     _init: bool
     _initialized: bool = False
     _count = 0
@@ -79,7 +81,6 @@ class Indicator:
         self._retention = retention
         self._init = init
 
-    def fit(self, data: pd.DataFrame):
         # Check if _period_default set
         if self._period_default is not None:
             if isinstance(self._period_config, Dict):
@@ -87,11 +88,12 @@ class Indicator:
                     if k not in self._period_config:
                         self._period_config[k] = v
 
-        # Validate period input
+    def validate_data(self, data: pd.DataFrame):
+        """Checks if the input data is compatible with the indicator configuration."""
         if isinstance(self._period_config, int):
             if len(data) < self._period_config:
                 raise ValueError(
-                    "len(data) must be greater than, or equal to the period."
+                    f"len(data) must be greater than, or equal to the period. [len(data)={len(data)}, period={self._period_config}]"
                 )
         elif isinstance(self._period_config, dict):
             for [key, period] in self._period_config.items():
@@ -100,7 +102,15 @@ class Indicator:
                         f"len(data) must be greater than, or equal to each period. \n[Key={key}, Period={period}, Data_Len={len(data)}]"
                     )
 
-        self._data = data
+        return True
+
+    def fit(self, data: pd.DataFrame):
+        # Validate period input
+        if self.validate_data(data):
+            log.debug(f"Fitting {len()} data points.")
+            self._data = data
+        else:
+            raise ValueError(f"An dataframe incompatible with {self} was supplied!")
 
     def period(self, key: Union[str, None] = None):
         if key is not None and key not in self._period_config:
