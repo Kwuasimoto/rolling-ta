@@ -102,7 +102,6 @@ class Indicator:
         return True
 
     def fit(self, data: pd.DataFrame):
-        log.debug(f"Trying to fit : {data.describe()}")
         # Validate period input
         if self.validate_data(data):
             log.debug(f"Fitting {len(data)} data points.")
