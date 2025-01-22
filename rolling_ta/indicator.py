@@ -107,7 +107,7 @@ class Indicator:
     def fit(self, data: pd.DataFrame):
         # Validate period input
         if self.validate_data(data):
-            log.debug(f"Fitting {len()} data points.")
+            log.debug(f"Fitting {len(data)} data points.")
             self._data = data
         else:
             raise ValueError(f"An dataframe incompatible with {self} was supplied!")
