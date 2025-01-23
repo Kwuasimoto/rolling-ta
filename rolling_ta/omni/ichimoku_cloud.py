@@ -51,9 +51,10 @@ class IchimokuCloud(Indicator):
         period_config: Dict[str, int] = {"tenkan": 9, "kijun": 26, "senkou": 52},
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         if not isinstance(self._period_config, dict):
             raise ValueError(
@@ -67,9 +68,10 @@ class IchimokuCloud(Indicator):
         self._clip = max(self._tenkan_period, self._kijun_period, self._senkou_period)
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
 
@@ -99,8 +101,13 @@ class IchimokuCloud(Indicator):
         self._high = high[-self._clip :]
         self._low = low[-self._clip :]
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         self._high = np.roll(self._high, -1)
@@ -125,6 +132,24 @@ class IchimokuCloud(Indicator):
         self._kijun_latest = kijun
         self._senkou_a_latest = senkou_a
         self._senkou_b_latest = senkou_b
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        columns = (
+            {
+                "tenkan": self._tenkan_period,
+                "kijun": self._kijun_period,
+                "senkou_a": self._tenkan_period + self._kijun_period,
+                "senkou_b": self._senkou_period,
+            }
+            if columns is None
+            else columns
+        )
+        super().set_columns(
+            (),
+            name,
+        )
 
     def to_array(
         self, get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan"

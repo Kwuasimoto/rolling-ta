@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -20,12 +20,13 @@ class StochasticRSI(Indicator):
         memory: bool = True,
         retention: Optional[None] = None,
         init: bool = False,
+        columns: Optional[list[str]] = None,
         rsi: Optional[RSI] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         self._rsi = (
-            RSI(data, period_config["rsi"], memory, retention, init)
+            RSI(data, period_config["rsi"], memory, retention, columns, init)
             if rsi is None
             else rsi
         )
@@ -35,11 +36,12 @@ class StochasticRSI(Indicator):
         self._d_smoothing = self.period("d")
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self, rsi: np.ndarray[np.float64] | None = None):
+    def calc(self, rsi: np.ndarray[np.float64] | None = None):
         if not self._rsi._initialized:
-            self._rsi.init()
+            self._rsi.calc()
 
         rsi = self._rsi.to_numpy()
         stoch_k = np.zeros(rsi.size, dtype=np.float64)
@@ -68,12 +70,35 @@ class StochasticRSI(Indicator):
             if stoch_d is not None:
                 self._d = array("d", stoch_d)
 
-    def fit(self, data):
-        super().fit(data)
-        self._rsi.fit(data)
+        if self._columns is None:
+            self.set_columns()
+
+        return self
 
     def update(self, data: pd.Series):
         return super().update(data, __name__)
+
+    def fit(self, data, period_config: Optional[Dict[str, Any]] = None):
+        super().fit(data, period_config)
+        self._rsi.fit(
+            data,
+            self._rsi._period_config if period_config is None else period_config["rsi"],
+        )
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            (
+                [
+                    f"stoch_rsi_{self._k_period}",
+                    f"stoch_rsi_k_{self._k_smoothing}",
+                    f"stoch_rsi_d_{self._d_smoothing}",
+                ]
+                if columns is None
+                else columns
+            ),
+            name,
+        )
+        self._rsi.set_columns(f"rsi_{self._rsi._period_config}")
 
     def to_array(self, get: Literal["k", "d"] = "k"):
         return super().to_array(get)

@@ -38,14 +38,15 @@ class MFI(Indicator):
         period: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period, memory, retention, init)
-
+        super().__init__(data, period, memory, retention, columns, init)
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
         close = self._data["close"].to_numpy(np.float64)
@@ -79,6 +80,9 @@ class MFI(Indicator):
         self._nmf_window = nmf[-self._period_config :]
 
         self.drop_data()
+        self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         volume = data["volume"]
@@ -100,6 +104,14 @@ class MFI(Indicator):
 
         if self._memory:
             self._mfi.append(mfi)
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"mfi_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["mfi"] = "mfi"):
         return super().to_array(get)

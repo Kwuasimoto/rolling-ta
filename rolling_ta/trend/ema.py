@@ -26,19 +26,20 @@ class EMA(Indicator):
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
         weight: np.float64 = 2.0,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
         self._weight = weight / (period_config + 1)
-
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
-        ema = np.zeros(close.size)
 
+        ema = np.zeros(close.size)
         ema, ema_latest = _ema(
             close,
             ema,
@@ -51,14 +52,27 @@ class EMA(Indicator):
         if self._memory:
             self._ema = array("d", ema)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         self._ema_latest = _ema_update(data["close"], self._weight, self._ema_latest)
 
         if self._memory:
             self._ema.append(self._ema_latest)
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"ema_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["ema"] = "ema"):
         return super().to_array(get)

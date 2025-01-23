@@ -1,7 +1,7 @@
 from enum import Enum
 import numpy as np
 import pandas as pd
-from typing import Literal, Optional, Union, Dict
+from typing import Any, List, Literal, Optional, Union, Dict
 
 from rolling_ta.logging import log
 
@@ -43,10 +43,11 @@ class Indicator:
 
     _id: IndicatorID
     _data: pd.DataFrame
-    _period_config: Union[int, Dict[str, int]] = None
-    _period_default: Union[int, Dict[str, int]] = None  # Set by the subclass
+    _columns: Optional[Union[str, list[str]]] = None
+    _period_config: Optional[Union[int, Dict[str, int]]] = None
+    _period_default: Optional[Union[int, Dict[str, int]]] = None  # Set by the subclass
     _memory: bool
-    _retention: Optional[int]
+    _retention: Optional[int] = None
     _init: bool
     _initialized: bool = False
     _count = 0
@@ -54,6 +55,7 @@ class Indicator:
     def get_config(self, key: str = None):
         cfg = {
             "id": self._id,
+            "columns": self._columns,
             "period_config": self._period_config,
             "memory": self._memory,
             "retention": self._retention,
@@ -70,12 +72,14 @@ class Indicator:
         period_config: Union[int, Dict[str, int]],
         memory: bool,
         retention: Union[int, None],
+        columns: Optional[list[str]],
         init: bool,
     ) -> None:
         self._data = data
         self._period_config = period_config
         self._memory = memory
         self._retention = retention
+        self._columns = columns
         self._init = init
 
         # Check if _period_default set
@@ -84,6 +88,43 @@ class Indicator:
                 for k, v in self._period_default.items():
                     if k not in self._period_config:
                         self._period_config[k] = v
+
+    def set_period(self, period_config: Union[str, Dict[str, Any]]):
+        log.debug(
+            f"Comparing period types: ({type(period_config)},{type(self._period_config)})"
+        )
+        if period_config is None:
+            return
+        if type(period_config) != type(self._period_config):
+            raise TypeError("Supplied invalid period_config for indicator.")
+        self._period_config = period_config
+
+    def set_columns(
+        self,
+        columns: Optional[Union[str, list[str], Dict[str, int]]],
+        name: Optional[str] = None,
+    ):
+        """Attempts to use period config to build columns if 'columns' argument is not supplied.
+
+        GOTCHAS:
+
+         - If self._config_period is an int, 'name' argument is required.
+        """
+        cols = []
+        if isinstance(columns, str):
+            cols.append(columns)
+        elif isinstance(columns, List):
+            cols.extend(columns)
+        elif isinstance(columns, Dict):
+            for k, v in columns.items():
+                cols.append(f"{k}_{v}")
+        elif isinstance(self._period_config, int):
+            cols.append(f"{name}_{self._period_config}")
+        elif isinstance(self._period_config, Dict):
+            for k, v in self._period_config.items():
+                cols.append(f"{k}_{v}")
+        log.debug(f"Setting columns -> {cols}", self)
+        self._columns = cols
 
     def validate_data(self, data: pd.DataFrame):
         """Checks if the input data is compatible with the indicator configuration."""
@@ -101,10 +142,16 @@ class Indicator:
 
         return True
 
-    def fit(self, data: pd.DataFrame):
+    def fit(
+        self,
+        data: pd.DataFrame,
+        period_config: Optional[Union[int, Dict[str, int]]] = None,
+    ):
+        if period_config is not None:
+            self.set_period(period_config)
         # Validate period input
         if self.validate_data(data):
-            log.debug(f"Fitting {len(data)} data points.")
+            log.debug(f"Fitting {len(data)} data points.", self)
             self._data = data
         else:
             raise ValueError(f"A dataframe incompatible with {self} was supplied!")
@@ -118,10 +165,10 @@ class Indicator:
             return self._period_config[key]
         return self._period_config
 
-    def init(self, __name__: str = "Unknown"):
+    def calc(self, __name__: str = "Unknown") -> "Indicator":
         raise NotImplementedError("Indicator not implemented yet! sorry!")
 
-    def update(self, data: pd.Series, __name__: str = "Unknown"):
+    def update(self, data: pd.Series, __name__: str = "Unknown") -> "Indicator":
         raise NotImplementedError(
             "Indicator update function not implemented yet! sorry!"
         )

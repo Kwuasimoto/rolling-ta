@@ -30,13 +30,15 @@ class SMA(Indicator):
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
         if init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
         sma = np.zeros(close.size)
 
@@ -49,8 +51,13 @@ class SMA(Indicator):
         if self._memory:
             self._sma = array("f", sma)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
 
@@ -68,8 +75,12 @@ class SMA(Indicator):
         if self._memory:
             self._sma.append(latest)
 
-    def sma_latest(self):
-        return self._sma_latest
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"sma_{self._period_config}" if columns is None else columns, name
+        )
 
     def to_array(self, get: Literal["sma"] = "sma"):
         return super().to_array(get)

@@ -19,23 +19,27 @@ class LinearRegressionR2(Indicator):
         period_config: int | Dict[str, int] = {"lr": 14, "lr2": 14},
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
         lr: Optional[LinearRegression] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         self._lr = (
-            LinearRegression(data, period_config["lr"], memory, retention, init)
+            LinearRegression(
+                data, period_config["lr"], memory, retention, columns, init
+            )
             if lr is None
             else lr
         )
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         if not self._lr._initialized:
-            self._lr.init()
+            self._lr.calc()
 
         price = self._lr.to_numpy(get="price", dtype=np.float64)
         slopes = self._lr.to_numpy(get="slope", dtype=np.float64)
@@ -47,8 +51,13 @@ class LinearRegressionR2(Indicator):
         if self._memory:
             self._r2 = array("d", r2)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         super().update(data, __name__)
@@ -56,6 +65,12 @@ class LinearRegressionR2(Indicator):
     def fit(self, data):
         super().fit(data)
         self._lr.fit(data)
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"lr2_{self._period_config['lr2']}" if columns is None else columns, name
+        )
+        self._lr.set_columns(f"lr_{self._lr._period_config}")
 
     def to_array(self, get: Literal["r2", "slope", "intercept", "price"] = "r2"):
         if get == "slope":

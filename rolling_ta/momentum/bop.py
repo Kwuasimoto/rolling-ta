@@ -1,11 +1,13 @@
 from array import array
-from typing import Dict, Literal, Optional, Union
+from typing import Literal, Optional
 
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _bop
 from rolling_ta.indicator import Indicator
+
+from rolling_ta.logging import log
 
 
 class BOP(Indicator):
@@ -14,17 +16,18 @@ class BOP(Indicator):
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: Union[int, Dict[str, int]] = 14,
+        period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
-
+        super().__init__(data, period_config, memory, retention, columns, init)
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         open = self._data["open"].to_numpy(dtype=np.float64)
         high = self._data["high"].to_numpy(dtype=np.float64)
         low = self._data["low"].to_numpy(dtype=np.float64)
@@ -37,8 +40,19 @@ class BOP(Indicator):
         if self._memory:
             self._bop = array("d", bop)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"bop_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["bop"] = "bop"):
         return super().to_array(get)

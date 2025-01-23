@@ -5,20 +5,24 @@ from tests.fixtures.eval import Eval
 from rolling_ta.trend import SMA
 
 
-def test_sma(sma_df: pd.DataFrame, evaluate: Eval):
-    expected = sma_df["sma"].to_numpy(dtype=np.float64)
-    rolling = SMA(data=sma_df, init=True).to_numpy(dtype=np.float64)
-    evaluate(expected, rolling, "SMA")
+def test_sma(sma: SMA, sma_df: pd.DataFrame, evaluate: Eval):
+    sma.fit(data=sma_df)
+    evaluate(
+        sma_df["sma"].to_numpy(dtype=np.float64),
+        sma.calc().to_numpy(dtype=np.float64),
+        "SMA",
+    )
 
 
-def test_sma_update(sma_df: pd.DataFrame, evaluate: Eval):
-    rolling = SMA(data=sma_df.iloc[:20], init=True)
+def test_sma_update(sma: SMA, sma_df: pd.DataFrame, evaluate: Eval):
+    sma.fit(data=sma_df.iloc[:20])
+    sma.calc()
 
     for _, series in sma_df.iloc[20:].iterrows():
-        rolling.update(series)
+        sma.update(series)
 
     evaluate(
         sma_df["sma"].to_numpy(dtype=np.float64),
-        rolling.to_numpy(dtype=np.float64),
+        sma.to_numpy(dtype=np.float64),
         "SMA_UPDATE",
     )

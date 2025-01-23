@@ -13,17 +13,19 @@ class WMA(Indicator):
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int | Dict[str, int] = 14,
+        period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
 
         wma = np.zeros(close.size, dtype=np.float64)
@@ -33,8 +35,19 @@ class WMA(Indicator):
         if self._memory:
             self._wma = array("d", wma)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"wma_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["wma"] = "wma"):
         return super().to_array(get)

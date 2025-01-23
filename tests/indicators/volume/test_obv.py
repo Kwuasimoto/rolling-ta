@@ -5,20 +5,23 @@ from tests.fixtures.eval import Eval
 from rolling_ta.volume import OBV
 
 
-def test_obv(obv_df: pd.DataFrame, evaluate: Eval):
-    expected = obv_df["obv"].to_numpy(dtype=np.float64)
-    rolling = OBV(data=obv_df, init=True).to_numpy(dtype=np.float64)
-    evaluate(expected, rolling, "OBV")
+def test_obv(obv: OBV, obv_df: pd.DataFrame, evaluate: Eval):
+    obv.fit(data=obv_df)
+    evaluate(
+        obv_df["obv"].to_numpy(dtype=np.float64),
+        obv.calc().to_numpy(dtype=np.float64),
+        "OBV",
+    )
 
 
-def test_obv_update(obv_df: pd.DataFrame, evaluate: Eval):
-    expected = obv_df["obv"]
-    rolling = OBV(data=obv_df.iloc[:20], init=True)
+def test_obv_update(obv: OBV, obv_df: pd.DataFrame, evaluate: Eval):
+    obv.fit(data=obv_df.iloc[:20])
+    obv.calc()
 
     for _, series in obv_df.iloc[20:].iterrows():
-        rolling.update(series)
+        obv.update(series)
 
     evaluate(
-        expected.to_numpy(dtype=np.float64),
-        rolling.to_numpy(dtype=np.float64),
+        obv_df["obv"].to_numpy(dtype=np.float64),
+        obv.to_numpy(dtype=np.float64),
     )

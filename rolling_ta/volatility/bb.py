@@ -28,24 +28,26 @@ class BollingerBands(Indicator):
         period_config: int | Dict[str, int] = 20,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
         moving_average: Optional[Indicator] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         # Use simple moving average if user does not supply a moving average.
         self._ma = (
-            SMA(data, period_config, memory, retention, init)
+            SMA(data, period_config, memory, retention, columns, init)
             if moving_average is None
             else moving_average
         )
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         if not self._ma._initialized:
-            self._ma.init()
+            self._ma.calc()
 
         close = self._data["close"].to_numpy(dtype=np.float64)
         ma = self._ma.to_numpy(dtype=np.float64)
@@ -61,9 +63,22 @@ class BollingerBands(Indicator):
         self.drop_data()
         self.set_initialized()
 
+        return self
+
     def fit(self, data):
         super().fit(data)
         self._ma.fit(data)
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            (
+                {"bb_upper": self._period_config, "bb_lower": self._period_config}
+                if columns is None
+                else columns
+            ),
+            name,
+        )
+        self._ma.set_columns(f"bb_center_{self._ma._period_config}")
 
     def to_array(self, get: Literal["ma", "upper", "lower"] = "ma"):
         if get == "ma":

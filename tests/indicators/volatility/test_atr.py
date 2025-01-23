@@ -2,23 +2,27 @@ import numpy as np
 import pandas as pd
 
 from tests.fixtures.eval import Eval
-from rolling_ta.volatility import ATR
+from rolling_ta.volatility import AverageTrueRange
 
 
-def test_atr(atr_df: pd.DataFrame, evaluate: Eval):
-    expected = atr_df["atr"].to_numpy(dtype=np.float64)
-    rolling = ATR(data=atr_df, init=True).to_numpy(dtype=np.float64)
-    evaluate(expected, rolling, "ATR")
+def test_atr(atr: AverageTrueRange, atr_df: pd.DataFrame, evaluate: Eval):
+    atr.fit(data=atr_df)
+    evaluate(
+        atr_df["atr"].to_numpy(dtype=np.float64),
+        atr.calc().to_numpy(dtype=np.float64),
+        "ATR",
+    )
 
 
-def test_atr_update(atr_df: pd.DataFrame, evaluate: Eval):
-    rolling = ATR(data=atr_df.iloc[:20], init=True)
+def test_atr_update(atr: AverageTrueRange, atr_df: pd.DataFrame, evaluate: Eval):
+    atr.fit(data=atr_df.iloc[:20])
+    atr.calc()
 
     for _, series in atr_df.iloc[20:].iterrows():
-        rolling.update(series)
+        atr.update(series)
 
     evaluate(
         atr_df["atr"].to_numpy(dtype=np.float64),
-        rolling.to_numpy(dtype=np.float64),
+        atr.to_numpy(dtype=np.float64),
         "ATR_UPDATE",
     )

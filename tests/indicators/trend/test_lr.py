@@ -10,27 +10,37 @@ from rolling_ta.trend import (
 )
 
 
-def test_intercepts(lr_df: pd.DataFrame, evaluate: Eval):
-    expected = lr_df["intercepts"].to_numpy(dtype=np.float64)
-    rolling = LinearRegression(data=lr_df, init=True).to_numpy(get="intercept")
-    evaluate(expected, rolling, "intercepts")
+def test_intercepts(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
+    lr.fit(data=lr_df)
+    evaluate(
+        lr_df["intercepts"].to_numpy(dtype=np.float64),
+        lr.calc().to_numpy(get="intercept"),
+        "intercepts",
+    )
 
 
-def test_slopes(lr_df: pd.DataFrame, evaluate: Eval):
-    expected = lr_df["slopes"].to_numpy(dtype=np.float64)
-    rolling = LinearRegression(data=lr_df, init=True).to_numpy(get="slope")
-    evaluate(expected, rolling, "slopes")
+def test_slopes(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
+    lr.fit(data=lr_df)
+    evaluate(
+        lr_df["slopes"].to_numpy(dtype=np.float64),
+        lr.calc().to_numpy(get="slope"),
+        "slopes",
+    )
 
 
-def test_r2(lr_df: pd.DataFrame, evaluate: Eval):
-    expected = lr_df["r2"].to_numpy(dtype=np.float64)
-    rolling = LinearRegressionR2(data=lr_df, init=True).to_numpy(get="r2")
-    evaluate(expected, rolling, "r2")
+def test_r2(lr2: LinearRegressionR2, lr_df: pd.DataFrame, evaluate: Eval):
+    lr2.fit(data=lr_df)
+    evaluate(
+        lr_df["r2"].to_numpy(dtype=np.float64),
+        lr2.calc().to_numpy(get="r2"),
+        "r2",
+    )
 
 
-def test_forecast(lr_df: pd.DataFrame, evaluate: Eval):
-    expected = lr_df["forecast"].to_numpy(dtype=np.float64)
-    rolling = LinearRegressionForecast(
-        data=lr_df, init=True, period_config={"lr": 14, "lrf": 0}
-    ).to_numpy(get="forecast")
-    evaluate(expected, rolling, "forecast")
+def test_forecast(lrf: LinearRegressionForecast, lr_df: pd.DataFrame, evaluate: Eval):
+    lrf.fit(data=lr_df, period_config={"lr": 14, "lrf": 0})
+    evaluate(
+        lr_df["forecast"].to_numpy(dtype=np.float64),
+        lrf.calc().to_numpy(get="forecast"),
+        "forecast",
+    )

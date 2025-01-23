@@ -1,5 +1,4 @@
-from typing import Optional, Type, Union
-from numba import types, typed, typeof
+from numba import types, typed
 from numba.experimental import jitclass
 import numpy as np
 

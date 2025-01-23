@@ -11,15 +11,17 @@ class MACD(Indicator):
         period_config: Dict[str, int] = {"fast": 12, "slow": 26, "smoothing": 9},
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
-        super().init(__name__)
+    def calc(self):
+        super().calc(__name__)
 
     def update(self, data: pd.Series):
         return super().update(data, __name__)

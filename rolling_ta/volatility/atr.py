@@ -6,10 +6,10 @@ import numpy as np
 
 from rolling_ta.indicator import Indicator
 from rolling_ta.extras.numba import _atr, _atr_update
-from rolling_ta.volatility import TR
+from rolling_ta.volatility import TrueRange
 
 
-class ATR(Indicator):
+class AverageTrueRange(Indicator):
     """
     Rolling Average True Range (ATR) indicator.
 
@@ -33,22 +33,24 @@ class ATR(Indicator):
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
-        true_range: Optional[TR] = None,
+        true_range: Optional[TrueRange] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
         self._tr = (
-            TR(data, period_config, memory, retention, init)
+            TrueRange(data, period_config, memory, retention, columns, init)
             if true_range is None
             else true_range
         )
         self._n_1 = self._period_config - 1
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         if not self._init:
-            self._tr.init()
+            self._tr.calc()
 
         tr = self._tr.to_numpy(dtype=np.float64)
         atr = np.zeros(tr.size, dtype=np.float64)
@@ -68,6 +70,8 @@ class ATR(Indicator):
         self.drop_data()
         self.set_initialized()
 
+        return self
+
     def update(self, data: pd.Series):
 
         self._tr.update(data)
@@ -82,9 +86,18 @@ class ATR(Indicator):
         if self._memory:
             self._atr.append(self._atr_latest)
 
-    def fit(self, data):
-        super().fit(data)
-        self._tr.fit(data)
+        return self
+
+    def fit(self, data, period_config: Optional[int] = None):
+        super().fit(data, period_config)
+        self._tr.fit(data, period_config)
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            {f"atr_{self._period_config}" if columns is None else columns},
+            name,
+        )
+        self._tr.set_columns(f"tr_{self._tr._period_config}")
 
     def to_array(self, get: Literal["atr", "tr"] = "atr"):
         if get == "tr":

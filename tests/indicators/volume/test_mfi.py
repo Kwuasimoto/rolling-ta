@@ -5,20 +5,24 @@ from tests.fixtures.eval import Eval
 from rolling_ta.volume import MFI
 
 
-def test_mfi(mfi_df: pd.DataFrame, evaluate: Eval):
-    expected = mfi_df["mfi"].to_numpy(dtype=np.float64)
-    rolling = MFI(data=mfi_df, init=True).to_numpy(dtype=np.float64)
-    evaluate(expected, rolling, "MFI")
+def test_mfi(mfi: MFI, mfi_df: pd.DataFrame, evaluate: Eval):
+    mfi.fit(data=mfi_df)
+    evaluate(
+        mfi_df["mfi"].to_numpy(dtype=np.float64),
+        mfi.calc().to_numpy(dtype=np.float64),
+        "MFI",
+    )
 
 
-def test_mfi_update(mfi_df: pd.DataFrame, evaluate: Eval):
-    rolling = MFI(data=mfi_df.iloc[:20], init=True)
+def test_mfi_update(mfi: MFI, mfi_df: pd.DataFrame, evaluate: Eval):
+    mfi.fit(data=mfi_df.iloc[:20])
+    mfi.calc()
 
     for _, series in mfi_df.iloc[20:].iterrows():
-        rolling.update(series)
+        mfi.update(series)
 
     evaluate(
         mfi_df["mfi"].to_numpy(dtype=np.float64),
-        rolling.to_numpy(dtype=np.float64),
+        mfi.to_numpy(dtype=np.float64),
         "MFI_UPDATE",
     )

@@ -5,20 +5,24 @@ from tests.fixtures.eval import Eval
 from rolling_ta.trend import EMA
 
 
-def test_ema(ema_df: pd.DataFrame, evaluate: Eval):
-    expected = ema_df["ema"].to_numpy(dtype=np.float64)
-    rolling = EMA(data=ema_df, init=True).to_numpy(dtype=np.float64)
-    evaluate(expected, rolling, "EMA")
+def test_ema(ema: EMA, ema_df: pd.DataFrame, evaluate: Eval):
+    ema.fit(data=ema_df)
+    evaluate(
+        ema_df["ema"].to_numpy(dtype=np.float64),
+        ema.calc().to_numpy(dtype=np.float64),
+        "EMA",
+    )
 
 
-def test_ema_update(ema_df: pd.DataFrame, evaluate: Eval):
-    rolling = EMA(data=ema_df.iloc[:20], init=True)
+def test_ema_update(ema: EMA, ema_df: pd.DataFrame, evaluate: Eval):
+    ema.fit(data=ema_df.iloc[:20])
+    ema.calc()
 
     for _, series in ema_df.iloc[20:].iterrows():
-        rolling.update(series)
+        ema.update(series)
 
     evaluate(
         ema_df["ema"].to_numpy(dtype=np.float64),
-        rolling.to_numpy(dtype=np.float64),
+        ema.to_numpy(dtype=np.float64),
         name="NUMBA_EMA_UPDATE",
     )

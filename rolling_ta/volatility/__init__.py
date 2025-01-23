@@ -1,9 +1,9 @@
-from .tr import TR
-from .atr import ATR
+from .tr import TrueRange
+from .atr import AverageTrueRange
 from .bb import BollingerBands
 
 __all__ = [
-    "TR",
-    "ATR",
+    "TrueRange",
+    "AverageTrueRange",
     "BollingerBands",
 ]

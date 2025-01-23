@@ -35,8 +35,16 @@ from rolling_ta.logging import log
 from rolling_ta.trend.ema import EMA
 
 if __name__ == "__main__":
-    loader = CSVLoader()
-    btc = loader.read_resource()
-    log.debug(f"{btc}")
+    columns = None
+    cols = (
+        {
+            "tenkan": 9,
+            "kijun": 12,
+            "senkou_a": 12 + 9,
+            "senkou_b": 52,
+        }
+        if columns is None
+        else columns
+    )
 
-    ema = EMA()
+    print(type(cols))

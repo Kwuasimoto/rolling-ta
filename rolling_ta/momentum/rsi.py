@@ -28,6 +28,7 @@ class RSI(Indicator):
         period_config: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
         """
@@ -40,12 +41,13 @@ class RSI(Indicator):
             retention (int): Default=20000 | The maximum number of RSI values to store in memory
             init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
         """
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
         self.alpha = 1 / self._period_config
         if init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         close = self._data["close"].to_numpy(np.float64)
         rsi = np.zeros(close.size, dtype=np.float64)
         gains = np.zeros(close.size, dtype=np.float64)
@@ -69,6 +71,8 @@ class RSI(Indicator):
         self.drop_data()
         self.set_initialized()
 
+        return self
+
     def update(self, data: pd.Series):
         close = data["close"]
 
@@ -80,12 +84,23 @@ class RSI(Indicator):
             self.alpha,
         )
 
-        if self._memory:
-            self._rsi.append(rsi)
-
         self._avg_gain = avg_gain
         self._avg_loss = avg_loss
         self._close_p = close
+
+        if self._memory:
+            self._rsi.append(rsi)
+
+        if self._columns is None:
+            self.set_columns()
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"rsi_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["rsi"] = "rsi"):
         return super().to_array(get)

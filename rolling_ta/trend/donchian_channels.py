@@ -16,14 +16,16 @@ class DonchianChannels(Indicator):
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         high = self._data["high"].to_numpy(dtype=np.float64)
         low = self._data["low"].to_numpy(dtype=np.float64)
 
@@ -38,8 +40,27 @@ class DonchianChannels(Indicator):
             self._low = array("d", lows)
             self._center = array("d", centers)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            (
+                {
+                    "donchian_high": self._period_config,
+                    "donchian_center": self._period_config,
+                    "donchian_low": self._period_config,
+                }
+                if columns is None
+                else columns
+            ),
+            name,
+        )
 
     def to_array(
         self,

@@ -13,7 +13,9 @@ from rolling_ta.extras.numba import (
     _dmi_update,
 )
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TR
+from rolling_ta.volatility import TrueRange
+
+from rolling_ta.logging import log
 
 
 class DMI(Indicator):
@@ -23,18 +25,24 @@ class DMI(Indicator):
         period: int = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
-        tr: Optional[TR] = None,
+        tr: Optional[TrueRange] = None,
     ) -> None:
-        super().__init__(data, period, memory, retention, init)
+        super().__init__(data, period, memory, retention, columns, init)
         self._n_1 = period - 1
-        self._tr = TR(data, period, memory, retention, init) if tr is None else tr
+        self._tr = (
+            TrueRange(data, period, memory, retention, columns, init)
+            if tr is None
+            else tr
+        )
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         if not self._init:
-            self._tr.init()
+            self._tr.calc()
 
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
@@ -73,8 +81,13 @@ class DMI(Indicator):
             self._pdmi = array("d", self._pdmi)
             self._ndmi = array("d", self._ndmi)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         high = data["high"]
@@ -99,9 +112,22 @@ class DMI(Indicator):
             self._pdmi.append(self._pdmi_p)
             self._ndmi.append(self._ndmi_p)
 
-    def fit(self, data):
-        super().fit(data)
-        self._tr.fit(data)
+        return self
+
+    def fit(self, data, period_config: Optional[int] = None):
+        super().fit(data, period_config)
+        self._tr.fit(data, period_config)
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            (
+                [f"pdmi_{self._period_config}", f"ndmi_{self._period_config}"]
+                if columns is None
+                else columns
+            ),
+            name,
+        )
+        self._tr.set_columns(f"tr_{self._tr._period_config}")
 
     def to_array(self, get: Literal["pdmi", "ndmi", "tr"] = "pdmi"):
         if get == "tr":

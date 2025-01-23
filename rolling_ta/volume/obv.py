@@ -12,16 +12,18 @@ class OBV(Indicator):
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: Union[Dict[str, int], None] = None,
+        period_config: Optional[int] = None,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         close = self._data["close"].to_numpy(np.float64)
         volume = self._data["volume"].to_numpy(np.float64)
         obv = np.zeros(close.size, dtype=np.float64)
@@ -35,6 +37,9 @@ class OBV(Indicator):
         self._close_p = close_latest
 
         self.drop_data()
+        self.set_initialized()
+
+        return self
 
     def update(self, data: pd.Series):
         close = data["close"]
@@ -47,6 +52,14 @@ class OBV(Indicator):
             self._obv.append(self._obv_latest)
 
         self._close_p = close
+
+        return self
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"obv_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["obv"] = "obv"):
         return super().to_array(get)

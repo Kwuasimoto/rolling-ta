@@ -17,11 +17,12 @@ class HMA(Indicator):
         period_config: int | Dict[str, int] = 14,
         memory: bool = True,
         retention: Optional[int] = None,
+        columns: Optional[list[str]] = None,
         init: bool = False,
         wma_full: Optional[WMA] = None,
         wma_half: Optional[WMA] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, init)
+        super().__init__(data, period_config, memory, retention, columns, init)
 
         self._wma_full = (
             WMA(data, period_config, memory, retention, init)
@@ -35,13 +36,14 @@ class HMA(Indicator):
         )
 
         if self._init:
-            self.init()
+            self.set_columns(columns)
+            self.calc()
 
-    def init(self):
+    def calc(self):
         if not self._wma_full._initialized:
-            self._wma_full.init()
+            self._wma_full.calc()
         if not self._wma_half._initialized:
-            self._wma_half.init()
+            self._wma_half.calc()
 
         close = self._data["close"].to_numpy(dtype=np.float64)
 
@@ -56,13 +58,24 @@ class HMA(Indicator):
         if self._memory:
             self._hma = array("d", hma)
 
+        if self._columns is None:
+            self.set_columns()
+
         self.drop_data()
         self.set_initialized()
+
+        return self
 
     def fit(self, data):
         super().fit(data)
         self._wma_half.fit(data)
         self._wma_full.fit(data)
+
+    def set_columns(self, columns=None, name=None):
+        super().set_columns(
+            f"hma_{self._period_config}" if columns is None else columns,
+            name,
+        )
 
     def to_array(self, get: Literal["hma"] = "hma"):
         return super().to_array(get)
