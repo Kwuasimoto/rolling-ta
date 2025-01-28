@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -8,20 +8,41 @@ from rolling_ta.extras.numba import _typical_price, _linear_regression
 from rolling_ta.indicator import Indicator
 
 
+LinearRegressionKeys = Literal["price", "slope", "intercept"]
+LinearRegressionPeriods = Literal["price"]
+
+
 class LinearRegression(Indicator):
+
+    _keys: List[LinearRegressionKeys] = ["price", "slope", "intercept"]
+    _period_config: Dict[LinearRegressionPeriods, int] = {"price": 14}
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int | Dict[str, int] = 14,
+        keys: List[LinearRegressionKeys] = _keys,
+        period_config: Dict[LinearRegressionPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        """period_config is rather opinionated, might try to make it more flexible in the future.
+
+        Use price key for period config.
+        """
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
+        if "slope" not in self._period_config:
+            self._period_config.update({"slope": self._period_config["price"]})
+        if "intercept" not in self._period_config:
+            self._period_config.update({"intercept": self._period_config["price"]})
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -30,19 +51,26 @@ class LinearRegression(Indicator):
         close = self._data["close"].to_numpy(dtype=np.float64)
 
         price = np.empty(close.size, dtype=np.float64)
-        _typical_price(high, low, close, price)
+        _typical_price(
+            high=high,
+            low=low,
+            close=close,
+            price_container=price,
+        )
 
         slope = np.zeros(price.size, dtype=np.float32)
         intercept = np.zeros(price.size, dtype=np.float32)
-        _linear_regression(price, slope, intercept, self._period_config)
+        _linear_regression(
+            ys=price,
+            slope_container=slope,
+            intercept_container=intercept,
+            period=self._period_config["price"],
+        )
 
         if self._memory:
             self._price = array("d", price)
             self._slope = array("d", slope)
             self._intercept = array("d", intercept)
-
-        if self._columns is None:
-            self.set_columns()
 
         self.drop_data()
         self.set_initialized()
@@ -52,32 +80,29 @@ class LinearRegression(Indicator):
     def update(self, data: pd.Series):
         super().update(data, __name__)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            (
-                {"lr": self._period_config, "lrs": self._period_config}
-                if columns is None
-                else columns
-            ),
-            name,
-        )
+    def fit(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[LinearRegressionPeriods, int] = _period_config,
+    ):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["slope", "intercept", "price"] = "slope"):
+    def to_array(self, get: LinearRegressionKeys = "slope"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["slope", "intercept", "price"] = "slope",
-        dtype: np.dtype | None = np.float64,
+        get: LinearRegressionKeys = "slope",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["slope", "intercept", "price"] = "slope",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: LinearRegressionKeys = "slope",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

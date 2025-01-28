@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from tests.fixtures.eval import Eval
 from rolling_ta.trend import EMA
+from tests.fixtures.helpers import Eval, ValidateSeries, ValidateDataFrame
 
 
 def test_ema(ema: EMA, ema_df: pd.DataFrame, evaluate: Eval):
@@ -26,3 +26,17 @@ def test_ema_update(ema: EMA, ema_df: pd.DataFrame, evaluate: Eval):
         ema.to_numpy(dtype=np.float64),
         name="NUMBA_EMA_UPDATE",
     )
+
+
+def test_ema_to_series(
+    ema: EMA,
+    ema_df: pd.DataFrame,
+    validate_series: ValidateSeries,
+):
+    validate_series(ema, ema_df, "ema")
+
+
+def test_ema_to_dataframe(
+    ema: EMA, ema_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
+):
+    validate_dataframe(ema, ema_df, ["ema_14"])

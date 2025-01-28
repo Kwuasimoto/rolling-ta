@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -7,29 +7,37 @@ import numpy as np
 from rolling_ta.extras.numba import _tr, _tr_update
 from rolling_ta.indicator import Indicator
 
-from rolling_ta.logging import log
+
+TrueRangeKeys = Literal["tr"]
+TrueRangePeriods = Literal["tr"]
 
 
 class TrueRange(Indicator):
 
+    _keys: List[TrueRangeKeys] = ["tr"]
+    _period_config: Dict[TrueRangePeriods, int] = {"tr": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[TrueRangeKeys] = _keys,
+        period_config: Dict[TrueRangePeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
-        if self._columns is None:
-            self.set_columns()
-
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
         close = self._data["close"].to_numpy(np.float64)
@@ -37,7 +45,13 @@ class TrueRange(Indicator):
         close_p = np.zeros(close.size, dtype=np.float64)
         tr = np.zeros(close.size, dtype=np.float64)
 
-        tr, tr_latest, close_p = _tr(high, low, close, close_p, tr)
+        tr, tr_latest, close_p = _tr(
+            high=high,
+            low=low,
+            close=close,
+            close_p_container=close_p,
+            tr_container=tr,
+        )
 
         # Save numpy copy for indicators that depend on tr
         self._tr = tr
@@ -65,31 +79,27 @@ class TrueRange(Indicator):
             self._tr.append(self._tr_latest)
 
         self._close_p = close
-
         return self._tr_latest
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"tr_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(self, data, period_config: Dict[TrueRangePeriods, int] = _period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["tr"] = "tr"):
+    def to_array(self, get: TrueRangeKeys = "tr"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["tr"] = "tr",
-        dtype: np.dtype | None = np.float64,
+        get: TrueRangeKeys = "tr",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["tr"] = "tr",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: TrueRangeKeys = "tr",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

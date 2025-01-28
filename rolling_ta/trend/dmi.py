@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -13,31 +13,49 @@ from rolling_ta.extras.numba import (
     _dmi_update,
 )
 from rolling_ta.indicator import Indicator
-from rolling_ta.volatility import TrueRange
+from rolling_ta.volatility.tr import TrueRange, TrueRangeKeys
 
-from rolling_ta.logging import log
+DMIKeys = Literal["pdmi", "ndmi", TrueRangeKeys]
+DMIPeriods = DMIKeys
 
 
 class DMI(Indicator):
+
+    _keys: List[DMIKeys] = ["pdmi", "ndmi", "tr"]
+    _period_config: Dict[DMIPeriods, int] = {
+        "pdmi": 14,
+        "ndmi": 14,
+        "tr": 14,
+    }
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period: int = 14,
+        keys: List[DMIKeys] = _keys,
+        period_config: Dict[DMIPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         tr: Optional[TrueRange] = None,
     ) -> None:
-        super().__init__(data, period, memory, retention, columns, init)
-        self._n_1 = period - 1
+        super().__init__(data, keys, period_config, memory, retention, init)
+        if "tr" not in self._period_config:
+            self._period_config.update(
+                {"tr": (self._period_config["pdmi"] + self._period_config["ndmi"]) // 2}
+            )
         self._tr = (
-            TrueRange(data, period, memory, retention, columns, init)
+            TrueRange(
+                data,
+                keys=["tr"],
+                period_config={"tr": self._period_config["tr"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if tr is None
             else tr
         )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -48,8 +66,6 @@ class DMI(Indicator):
         low = self._data["low"].to_numpy(np.float64)
         tr = self.to_numpy("tr", np.float64)
 
-        # pdm, ndm, pdm[-1], ndm[-1], high[-1], low[-1]
-
         pdm, ndm, high_p, low_p = _dm(
             high,
             low,
@@ -58,20 +74,26 @@ class DMI(Indicator):
         )
 
         s_tr, self._s_tr_p = _dm_smoothing(
-            tr, np.zeros(tr.size, dtype=np.float64), self._period_config
+            tr, np.zeros(tr.size, dtype=np.float64), self._period_config["tr"]
         )
         s_pdm, self._s_pdm_p = _dm_smoothing(
-            pdm, np.zeros(pdm.size, dtype=np.float64), self._period_config
+            pdm, np.zeros(pdm.size, dtype=np.float64), self._period_config["pdmi"]
         )
         s_ndm, self._s_ndm_p = _dm_smoothing(
-            ndm, np.zeros(ndm.size, dtype=np.float64), self._period_config
+            ndm, np.zeros(ndm.size, dtype=np.float64), self._period_config["ndmi"]
         )
 
         self._pdmi, self._pdmi_p = _dmi(
-            s_pdm, s_tr, np.zeros(s_pdm.size, dtype=np.float64), self._period_config
+            s_pdm,
+            s_tr,
+            np.zeros(s_pdm.size, dtype=np.float64),
+            self._period_config["pdmi"],
         )
         self._ndmi, self._ndmi_p = _dmi(
-            s_ndm, s_tr, np.zeros(s_ndm.size, dtype=np.float64), self._period_config
+            s_ndm,
+            s_tr,
+            np.zeros(s_ndm.size, dtype=np.float64),
+            self._period_config["ndmi"],
         )
 
         self._high_p = high_p
@@ -80,9 +102,6 @@ class DMI(Indicator):
         if self._memory:
             self._pdmi = array("d", self._pdmi)
             self._ndmi = array("d", self._ndmi)
-
-        if self._columns is None:
-            self.set_columns()
 
         self.drop_data()
         self.set_initialized()
@@ -98,9 +117,13 @@ class DMI(Indicator):
 
         pdm, ndm = _dm_update(high, low, self._high_p, self._low_p)
 
-        self._s_tr_p = _dm_smoothing_update(tr, self._s_tr_p, self._period_config)
-        self._s_pdm_p = _dm_smoothing_update(pdm, self._s_pdm_p, self._period_config)
-        self._s_ndm_p = _dm_smoothing_update(ndm, self._s_ndm_p, self._period_config)
+        self._s_tr_p = _dm_smoothing_update(tr, self._s_tr_p, self._period_config["tr"])
+        self._s_pdm_p = _dm_smoothing_update(
+            pdm, self._s_pdm_p, self._period_config["pdmi"]
+        )
+        self._s_ndm_p = _dm_smoothing_update(
+            ndm, self._s_ndm_p, self._period_config["ndmi"]
+        )
 
         self._pdmi_p = _dmi_update(self._s_pdm_p, self._s_tr_p)
         self._ndmi_p = _dmi_update(self._s_ndm_p, self._s_tr_p)
@@ -114,30 +137,22 @@ class DMI(Indicator):
 
         return self
 
-    def fit(self, data, period_config: Optional[int] = None):
+    def fit(
+        self, data, period_config: Optional[Dict[DMIPeriods, int]] = _period_config
+    ):
         super().fit(data, period_config)
-        self._tr.fit(data, period_config)
+        if set(period_config.keys()) & set(self._tr._period_config.keys()):
+            self._tr.fit(data, period_config)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            (
-                [f"pdmi_{self._period_config}", f"ndmi_{self._period_config}"]
-                if columns is None
-                else columns
-            ),
-            name,
-        )
-        self._tr.set_columns(f"tr_{self._tr._period_config}")
-
-    def to_array(self, get: Literal["pdmi", "ndmi", "tr"] = "pdmi"):
+    def to_array(self, get: DMIKeys = "pdmi"):
         if get == "tr":
             return self._tr.to_array(get)
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["pdmi", "ndmi", "tr"] = "pdmi",
-        dtype: np.dtype | None = np.float64,
+        get: DMIKeys = "pdmi",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         if get == "tr":
@@ -146,13 +161,13 @@ class DMI(Indicator):
 
     def to_series(
         self,
-        get: Literal["pdmi", "ndmi", "tr"] = "pdmi",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: DMIKeys = "pdmi",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         if get == "tr":
-            self._tr.to_series(get, dtype, name, **kwargs)
+            return self._tr.to_series(get, dtype, name, **kwargs)
         return super().to_series(get, dtype, name, **kwargs)
 
     def pdmi_latest(self):

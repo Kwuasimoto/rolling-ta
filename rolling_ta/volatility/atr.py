@@ -1,12 +1,17 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 import pandas as pd
 import numpy as np
 
 from rolling_ta.indicator import Indicator
 from rolling_ta.extras.numba import _atr, _atr_update
-from rolling_ta.volatility import TrueRange
+
+from .tr import TrueRange, TrueRangeKeys, TrueRangePeriods
+
+
+AverageTrueRangeKeys = Union[Literal["atr"], TrueRangeKeys]
+AverageTrueRangePeriods = Union[Literal["atr"], TrueRangePeriods]
 
 
 class AverageTrueRange(Indicator):
@@ -27,25 +32,40 @@ class AverageTrueRange(Indicator):
     - https://pypi.org/project/ta/
     """
 
+    _keys: List[AverageTrueRangeKeys] = ["atr", "tr"]
+    _period_config: Dict[AverageTrueRangePeriods, int] = {"atr": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[AverageTrueRangeKeys] = _keys,
+        period_config: Dict[AverageTrueRangePeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         true_range: Optional[TrueRange] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(data, keys, period_config, memory, retention, init)
+        if "tr" not in self._period_config:
+            self._period_config.update({"tr": self._period_config["atr"]})
         self._tr = (
-            TrueRange(data, period_config, memory, retention, columns, init)
+            TrueRange(
+                data,
+                keys=["tr"],
+                period_config={"tr": self._period_config["tr"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if true_range is None
             else true_range
         )
-        self._n_1 = self._period_config - 1
+        self._p_1 = (
+            self._period_config["atr"] - 1
+            if "p_1" not in period_config
+            else period_config["p_1"]
+        )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -56,10 +76,10 @@ class AverageTrueRange(Indicator):
         atr = np.zeros(tr.size, dtype=np.float64)
 
         self._atr, latest = _atr(
-            tr,
-            atr,
-            self._period_config,
-            self._n_1,
+            tr=tr,
+            atr_container=atr,
+            period=self._period_config["atr"],
+            p_1=self._p_1,
         )
 
         self._atr_latest = latest
@@ -77,48 +97,45 @@ class AverageTrueRange(Indicator):
         self._tr.update(data)
 
         self._atr_latest = _atr_update(
-            self._atr_latest,
-            self._tr._tr_latest,
-            self._period_config,
-            self._n_1,
+            atr_latest=self._atr_latest,
+            tr_current=self._tr._tr_latest,
+            period=self._period_config["atr"],
+            p_1=self._p_1,
         )
 
         if self._memory:
             self._atr.append(self._atr_latest)
-
         return self
 
-    def fit(self, data, period_config: Optional[int] = None):
+    def fit(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[AverageTrueRangePeriods, int] = _period_config,
+    ):
         super().fit(data, period_config)
-        self._tr.fit(data, period_config)
+        if set(period_config.keys()) & set(self._tr._period_config.keys()):
+            self._tr.fit(data, period_config)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            {f"atr_{self._period_config}" if columns is None else columns},
-            name,
-        )
-        self._tr.set_columns(f"tr_{self._tr._period_config}")
-
-    def to_array(self, get: Literal["atr", "tr"] = "atr"):
+    def to_array(self, get: AverageTrueRangeKeys = "atr"):
         if get == "tr":
             return self._tr.to_array(get)
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["atr", "tr"] = "atr",
-        dtype: np.dtype | None = np.float64,
+        get: AverageTrueRangeKeys = "atr",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         if get == "tr":
-            return self._tr.to_numpy(get, dtype**kwargs)
+            return self._tr.to_numpy(get, dtype, **kwargs)
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["atr", "tr"] = "atr",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: AverageTrueRangeKeys = "atr",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         if get == "tr":

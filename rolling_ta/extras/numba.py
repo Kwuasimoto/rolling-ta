@@ -117,10 +117,10 @@ def _typical_price(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
     close: np.ndarray[f8],
-    typical_price_container: np.ndarray[f8],
+    price_container: np.ndarray[f8],
 ):
-    for i in nb.prange(typical_price_container.size):
-        typical_price_container[i] = _typical_price_single(high[i], low[i], close[i])
+    for i in nb.prange(price_container.size):
+        price_container[i] = _typical_price_single(high[i], low[i], close[i])
 
 
 @nb.njit(inline="always", cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH)
@@ -216,19 +216,19 @@ def _hma(
     wma_half: np.ndarray[f8],
     hma_internim: np.ndarray[f8],
     hma_container: np.ndarray[f8],
-    wma_full_period: i4 = 14,
+    hma_period: i4 = 14,
 ):
-    for i in nb.prange(wma_full_period - 1, hma_container.size):
+    for i in nb.prange(hma_period - 1, hma_container.size):
         hma_internim[i] = (wma_half[i] * 2) - wma_full[i]
 
-    period_sqrt = floor(wma_full_period**0.5)
+    period_sqrt = floor(hma_period**0.5)
     p_1 = period_sqrt - 1
     weight_sum: i4 = 0
 
     for i in nb.prange(1, period_sqrt + 1):
         weight_sum += i
 
-    for i in nb.prange(wma_full_period - 1, hma_container.size - period_sqrt + 1):
+    for i in nb.prange(hma_period - 1, hma_container.size - period_sqrt + 1):
         current_weighted_sum: f8 = 0.0
 
         for j in nb.prange(0, period_sqrt):
@@ -672,7 +672,7 @@ def _tr_update(high: f8, low: f8, close_p: f8) -> f8:
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
 def _atr(
-    tr: np.ndarray[f8], atr_container: np.ndarray[f8], period: i4 = 14, n_1: i4 = 13
+    tr: np.ndarray[f8], atr_container: np.ndarray[f8], period: i4 = 14, p_1: i4 = 13
 ) -> tuple[np.ndarray[f8], f8]:
     mean: f8 = 0.0
     for i in nb.prange(period):
@@ -680,13 +680,13 @@ def _atr(
     atr_container[period - 1] = mean / period
 
     for i in range(period, tr.size):
-        atr_container[i] = ((atr_container[i - 1] * n_1) + tr[i]) / period
+        atr_container[i] = ((atr_container[i - 1] * p_1) + tr[i]) / period
     return atr_container, atr_container[-1]
 
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
-def _atr_update(atr_latest: f8, tr_current: f8, period: i4 = 14, n_1=13) -> f8:
-    return ((atr_latest * n_1) + tr_current) / period
+def _atr_update(atr_latest: f8, tr_current: f8, period: i4 = 14, p_1=13) -> f8:
+    return ((atr_latest * p_1) + tr_current) / period
 
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
@@ -852,9 +852,8 @@ def _adx_update(
     dx: f8,
     adx_p: f8,
     adx_period: i4 = 14,
-    n_1: id = 13,
 ) -> f8:
-    return ((adx_p * n_1) + dx) / adx_period
+    return ((adx_p * (adx_period - 1)) + dx) / adx_period
 
 
 @nb.njit(
@@ -919,21 +918,19 @@ def _senkou_b(
     high: np.ndarray[f8],
     low: np.ndarray[f8],
     senkou_b_container: np.ndarray[f8],
-    senkou_period: f8,
+    period: f8,
 ):
-    _sliding_midpoint(high, low, senkou_b_container, senkou_period)
-    senkou_b_container[: senkou_period - 1] = senkou_b_container[senkou_period - 1]
+    _sliding_midpoint(high, low, senkou_b_container, period)
+    senkou_b_container[: period - 1] = senkou_b_container[period - 1]
 
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
 def _senkou_b_update(
     high_container: np.ndarray[f8],
     low_container: np.ndarray[f8],
-    senkou_period: i8,
+    period: i8,
 ) -> f8:
-    return (
-        max(high_container[-senkou_period:]) + min(low_container[-senkou_period:])
-    ) * 0.5
+    return (max(high_container[-period:]) + min(low_container[-period:])) * 0.5
 
 
 @nb.njit(

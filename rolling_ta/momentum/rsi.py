@@ -1,11 +1,14 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _rsi, _rsi_update
 from rolling_ta.indicator import Indicator
+
+RelativeStrengthIndexKeys = Literal["rsi"]
+RelativeStrengthIndexPeriods = Literal["rsi"]
 
 
 class RSI(Indicator):
@@ -22,13 +25,16 @@ class RSI(Indicator):
         https://www.investopedia.com/terms/r/rsi.asp
     """
 
+    _keys: List[RelativeStrengthIndexKeys] = ["rsi"]
+    _period_config: Dict[RelativeStrengthIndexPeriods, int] = {"rsi": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[RelativeStrengthIndexKeys] = _keys,
+        period_config: Dict[RelativeStrengthIndexPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
         """
@@ -41,10 +47,16 @@ class RSI(Indicator):
             retention (int): Default=20000 | The maximum number of RSI values to store in memory
             init (bool): Default=True | Whether to calculate the initial RSI values upon instantiation.
         """
-        super().__init__(data, period_config, memory, retention, columns, init)
-        self.alpha = 1 / self._period_config
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
+        self.alpha = 1 / period_config["rsi"]
         if init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -54,11 +66,12 @@ class RSI(Indicator):
         losses = np.zeros(close.size, dtype=np.float64)
 
         rsi, avg_gain, avg_loss, close_p = _rsi(
-            close,
-            rsi,
-            gains,
-            losses,
-            self._period_config,
+            close=close,
+            rsi_container=rsi,
+            gains_container=gains,
+            losses_container=losses,
+            period=self._period_config["rsi"],
+            p_1=self._period_config["rsi"] - 1,
         )
 
         if self._memory:
@@ -91,33 +104,31 @@ class RSI(Indicator):
         if self._memory:
             self._rsi.append(rsi)
 
-        if self._columns is None:
-            self.set_columns()
-
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"rsi_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(
+        self,
+        data,
+        period_config: Dict[RelativeStrengthIndexPeriods, int] = _period_config,
+    ):
+        super().fit(data, period_config)
 
-    def to_array(self, get: Literal["rsi"] = "rsi"):
+    def to_array(self, get: RelativeStrengthIndexKeys = "rsi"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["rsi"] = "rsi",
-        dtype: np.dtype | None = np.float64,
+        get: RelativeStrengthIndexKeys = "rsi",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["rsi"] = "rsi",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: RelativeStrengthIndexKeys = "rsi",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

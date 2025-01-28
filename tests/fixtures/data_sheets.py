@@ -248,9 +248,9 @@ def lr_df(xls_loader: XLSXLoader):
                 "close",
                 "typical",
                 "row",
-                "intercepts",
-                "slopes",
-                "r2",
+                "intercept",
+                "slope",
+                "lr2",
                 "forecast",
             ],
         ).copy()

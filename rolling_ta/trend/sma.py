@@ -1,11 +1,15 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _sma, _sma_update
 from rolling_ta.indicator import Indicator
+
+
+SMAKeys = Literal["sma"]
+SMAPeriods = Literal["sma"]
 
 
 class SMA(Indicator):
@@ -22,27 +26,40 @@ class SMA(Indicator):
         https://pypi.org/project/ta/
     """
 
+    _keys: List[SMAKeys] = ["sma"]
+    _period_config: Dict[SMAPeriods, int] = {"sma": 14}
+
     _sma_latest = np.nan
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[SMAKeys] = _keys,
+        period_config: Dict[SMAPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
         if init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
         close = self._data["close"].to_numpy(dtype=np.float64)
         sma = np.zeros(close.size)
 
-        sma, window, window_sum, latest = _sma(close, sma, self._period_config)
+        sma, window, window_sum, latest = _sma(
+            close,
+            sma,
+            self._period_config["sma"],
+        )
 
         self._window = window
         self._window_sum = window_sum
@@ -50,9 +67,6 @@ class SMA(Indicator):
 
         if self._memory:
             self._sma = array("f", sma)
-
-        if self._columns is None:
-            self.set_columns()
 
         self.drop_data()
         self.set_initialized()
@@ -65,7 +79,7 @@ class SMA(Indicator):
             data["close"],
             self._window_sum,
             self._window,
-            self._period_config,
+            self._period_config["sma"],
         )
 
         self._sma_latest = latest
@@ -77,27 +91,25 @@ class SMA(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"sma_{self._period_config}" if columns is None else columns, name
-        )
+    def fit(self, data, period_config: SMAPeriods = _period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["sma"] = "sma"):
+    def to_array(self, get: SMAKeys = "sma"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["sma"] = "sma",
-        dtype: np.dtype | None = np.float64,
+        get: SMAKeys = "sma",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["sma"] = "sma",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: SMAKeys = "sma",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

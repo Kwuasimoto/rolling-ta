@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,9 @@ from rolling_ta.extras.numba import (
     _tenkan_update,
 )
 from rolling_ta.indicator import Indicator
+
+IchimokuCloudKeys = Literal["tenkan", "kijun", "senkou_a", "senkou_b"]
+IchiMokuCloudPeriods = IchimokuCloudKeys
 
 
 class IchimokuCloud(Indicator):
@@ -43,32 +46,37 @@ class IchimokuCloud(Indicator):
       If not provided, it defaults to the 'kijun' period (typically 26).
     """
 
-    _period_default = {"tenkan": 9, "kijun": 26, "senkou": 52}
+    _keys: List[IchimokuCloudKeys] = ["tenkan", "kijun", "senkou_a", "senkou_b"]
+    _period_default: Dict[IchiMokuCloudPeriods, int] = {
+        "tenkan": 9,
+        "kijun": 26,
+        "senkou_b": 52,
+    }
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: Dict[str, int] = {"tenkan": 9, "kijun": 26, "senkou": 52},
+        keys: List[IchimokuCloudKeys] = _keys,
+        period_config: Dict[IchiMokuCloudPeriods, int] = _period_default,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(data, keys, period_config, memory, retention, init)
 
-        if not isinstance(self._period_config, dict):
-            raise ValueError(
-                "Ichimoku Cloud period config must be a dictionary. \nPlease review the docstring or use help(indicator) for more information."
-            )
+        # Senkou_a should not be supplied, but its possible for weird indicator configurations.
+        if "senkou_a" not in period_config:
+            period_config["senkou_a"] = period_config["kijun"] + period_config["tenkan"]
 
         # Deconstruct period config to attributes to avoid function overhead
-        self._tenkan_period = self.period("tenkan")
-        self._kijun_period = self.period("kijun")
-        self._senkou_period = self.period("senkou")
-        self._clip = max(self._tenkan_period, self._kijun_period, self._senkou_period)
+        self._clip = max(
+            self._period_config["tenkan"],
+            self._period_config["kijun"],
+            self._period_config["senkou_a"],
+            self._period_config["senkou_b"],
+        )
 
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -76,16 +84,22 @@ class IchimokuCloud(Indicator):
         low = self._data["low"].to_numpy(np.float64)
 
         tenkan = np.zeros(high.size, dtype=np.float64)
-        _tenkan(high, low, tenkan, self._tenkan_period)
+        _tenkan(high, low, tenkan, self._period_config["tenkan"])
 
         kijun = np.zeros(high.size, dtype=np.float64)
-        _kijun(high, low, kijun, self._kijun_period)
-
-        senkou_b = np.zeros(high.size, dtype=np.float64)
-        _senkou_b(high, low, senkou_b, self._senkou_period)
+        _kijun(high, low, kijun, self._period_config["kijun"])
 
         senkou_a = np.zeros(high.size, dtype=np.float64)
-        _senkou_a(tenkan, kijun, senkou_a, self._tenkan_period, self._kijun_period)
+        _senkou_a(
+            tenkan,
+            kijun,
+            senkou_a,
+            self._period_config["tenkan"],
+            self._period_config["kijun"],
+        )
+
+        senkou_b = np.zeros(high.size, dtype=np.float64)
+        _senkou_b(high, low, senkou_b, self._period_config["senkou_b"])
 
         if self._memory:
             self._tenkan = array("d", tenkan)
@@ -101,9 +115,6 @@ class IchimokuCloud(Indicator):
         self._high = high[-self._clip :]
         self._low = low[-self._clip :]
 
-        if self._columns is None:
-            self.set_columns()
-
         self.drop_data()
         self.set_initialized()
 
@@ -116,9 +127,14 @@ class IchimokuCloud(Indicator):
         self._low = np.roll(self._low, -1)
         self._low[-1] = data["low"]
 
-        tenkan = _tenkan_update(self._high, self._low, self._tenkan_period)
-        kijun = _kijun_update(self._high, self._low, self._kijun_period)
-        senkou_b = _senkou_b_update(self._high, self._low, self._senkou_period)
+        tenkan = _tenkan_update(self._high, self._low, self._period_config["tenkan"])
+        kijun = _kijun_update(self._high, self._low, self._period_config["kijun"])
+
+        senkou_b = _senkou_b_update(
+            self._high,
+            self._low,
+            self._period_config["senkou_b"],
+        )
 
         senkou_a = _senkou_a_update(tenkan, kijun)
 
@@ -135,40 +151,29 @@ class IchimokuCloud(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        columns = (
-            {
-                "tenkan": self._tenkan_period,
-                "kijun": self._kijun_period,
-                "senkou_a": self._tenkan_period + self._kijun_period,
-                "senkou_b": self._senkou_period,
-            }
-            if columns is None
-            else columns
-        )
-        super().set_columns(
-            (),
-            name,
-        )
-
-    def to_array(
-        self, get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan"
+    def fit(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[IchiMokuCloudPeriods, int] = _period_default,
     ):
+        return super().fit(data, period_config)
+
+    def to_array(self, get: IchimokuCloudKeys = "tenkan"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan",
-        dtype: np.dtype | None = np.float64,
+        get: IchimokuCloudKeys = "tenkan",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["tenkan", "kijun", "senkou_a", "senkou_b"] = "tenkan",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: IchimokuCloudKeys = "tenkan",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

@@ -1,8 +1,9 @@
 from enum import Enum
 import numpy as np
 import pandas as pd
-from typing import Any, List, Literal, Optional, Union, Dict
+from typing import Any, Iterable, List, Literal, Optional, Union, Dict
 
+from rolling_ta import data
 from rolling_ta.logging import log
 
 
@@ -43,19 +44,32 @@ class Indicator:
 
     _id: IndicatorID
     _data: pd.DataFrame
-    _columns: Optional[Union[str, list[str]]] = None
-    _period_config: Optional[Union[int, Dict[str, int]]] = None
-    _period_default: Optional[Union[int, Dict[str, int]]] = None  # Set by the subclass
+    _keys: List[Literal["base"]] = ["base"]
+    _period_config: Dict[Literal["base"], int] = {}
     _memory: bool
     _retention: Optional[int] = None
     _init: bool
     _initialized: bool = False
     _count = 0
 
+    def __init__(
+        self,
+        data: Optional[pd.DataFrame],
+        keys: List[Literal["base"]],
+        period_config: Dict[Literal["base"], int],
+        memory: bool,
+        retention: Optional[int],
+        init: bool,
+    ) -> None:
+        self._data = data
+        self._keys = keys
+        self._period_config = period_config
+        self._memory = memory
+        self._retention = retention
+        self._init = init
+
     def get_config(self, key: str = None):
         cfg = {
-            "id": self._id,
-            "columns": self._columns,
             "period_config": self._period_config,
             "memory": self._memory,
             "retention": self._retention,
@@ -66,68 +80,23 @@ class Indicator:
             return cfg
         return cfg[key]
 
-    def __init__(
-        self,
-        data: Optional[pd.DataFrame],
-        period_config: Union[int, Dict[str, int]],
-        memory: bool,
-        retention: Union[int, None],
-        columns: Optional[list[str]],
-        init: bool,
-    ) -> None:
-        self._data = data
-        self._period_config = period_config
-        self._memory = memory
-        self._retention = retention
-        self._columns = columns
-        self._init = init
-
-        # Check if _period_default set
-        if self._period_default is not None:
-            if isinstance(self._period_config, Dict):
-                for k, v in self._period_default.items():
-                    if k not in self._period_config:
-                        self._period_config[k] = v
-
-    def set_period(self, period_config: Union[str, Dict[str, Any]]):
-        log.debug(
-            f"Comparing period types: ({type(period_config)},{type(self._period_config)})"
-        )
-        if period_config is None:
-            return
-        if type(period_config) != type(self._period_config):
-            raise TypeError("Supplied invalid period_config for indicator.")
-        self._period_config = period_config
-
-    def set_columns(
-        self,
-        columns: Optional[Union[str, list[str], Dict[str, int]]],
-        name: Optional[str] = None,
+    def set_period_config(
+        self, period_config: Optional[Dict[Literal["base"], Any]] = _period_config
     ):
-        """Attempts to use period config to build columns if 'columns' argument is not supplied.
+        for k, v in period_config.items():
+            if k in self._period_config:
+                self._period_config[k] = v
 
-        GOTCHAS:
+    def extend_period_config(self, ext: Dict[Literal["base_ext"], Any]):
+        self._period_config.update()
 
-         - If self._config_period is an int, 'name' argument is required.
-        """
-        cols = []
-        if isinstance(columns, str):
-            cols.append(columns)
-        elif isinstance(columns, List):
-            cols.extend(columns)
-        elif isinstance(columns, Dict):
-            for k, v in columns.items():
-                cols.append(f"{k}_{v}")
-        elif isinstance(self._period_config, int):
-            cols.append(f"{name}_{self._period_config}")
-        elif isinstance(self._period_config, Dict):
-            for k, v in self._period_config.items():
-                cols.append(f"{k}_{v}")
-        log.debug(f"Setting columns -> {cols}", self)
-        self._columns = cols
+    def set_keys(self, keys: list[str]):
+        self._keys = keys
 
     def validate_data(self, data: pd.DataFrame):
         """Checks if the input data is compatible with the indicator configuration."""
+        if self._period_config is None:
+            log.error(f"Unable to determine if data is valid if period_config is None")
         if isinstance(self._period_config, int):
             if len(data) < self._period_config:
                 raise ValueError(
@@ -145,10 +114,11 @@ class Indicator:
     def fit(
         self,
         data: pd.DataFrame,
-        period_config: Optional[Union[int, Dict[str, int]]] = None,
+        period_config: Optional[Dict[Literal["base"], int]] = _period_config,
     ):
         if period_config is not None:
-            self.set_period(period_config)
+            log.debug(f"Fitting period: {period_config}", self)
+            self.set_period_config(period_config)
         # Validate period input
         if self.validate_data(data):
             log.debug(f"Fitting {len(data)} data points.", self)
@@ -156,8 +126,8 @@ class Indicator:
         else:
             raise ValueError(f"A dataframe incompatible with {self} was supplied!")
 
-    def period(self, key: Union[str, None] = None):
-        if key is not None and key not in self._period_config:
+    def period(self, key: Literal["base"] = "base"):
+        if key not in self._period_config:
             raise ValueError(
                 "Invalid key for Indicator period_config! Please review the indicator subclass period configuration for details. \nThe python help(indicator) function will display the class doc_string with the required period config dictionary."
             )
@@ -165,10 +135,10 @@ class Indicator:
             return self._period_config[key]
         return self._period_config
 
-    def calc(self, __name__: str = "Unknown") -> "Indicator":
+    def calc(self, __name__: str = "base") -> "Indicator":
         raise NotImplementedError("Indicator not implemented yet! sorry!")
 
-    def update(self, data: pd.Series, __name__: str = "Unknown") -> "Indicator":
+    def update(self, data: pd.Series, __name__: str = "base") -> "Indicator":
         raise NotImplementedError(
             "Indicator update function not implemented yet! sorry!"
         )
@@ -184,7 +154,7 @@ class Indicator:
     def drop_data(self):
         self._data = None
 
-    def to_array(self, get: Literal["unknown"] = "unknown"):
+    def to_array(self, get: Literal["base"] = "base"):
         """Returns the raw information associated with this indicator object.
 
         Args:
@@ -201,7 +171,7 @@ class Indicator:
 
     def to_numpy(
         self,
-        get: Literal["Unknown"] = "unknown",
+        get: Literal["base"] = "base",
         dtype: Union[np.dtype, None] = np.float64,
         **kwargs,
     ):
@@ -223,9 +193,9 @@ class Indicator:
 
     def to_series(
         self,
-        get: Literal["Unknown"] = "unknown",
+        get: Literal["base"] = "base",
         dtype: Union[type, None] = float,
-        name: Union[str, None] = None,
+        name: Optional[str] = None,
         **kwargs,
     ):
         """Returns the information associated with this indicator object as a pandas series.
@@ -243,4 +213,22 @@ class Indicator:
         assert (
             raw is not None
         ), f"Indicator does not exist, memory may not set, or get value is incorrect. [get={get}, memory={self._memory}]"
-        return pd.Series(raw, dtype=dtype, name=name, **kwargs)
+        return pd.Series(
+            raw,
+            dtype=dtype,
+            name=f"{get}_{self._period_config[get]}" if name is None else name,
+            **kwargs,
+        )
+
+    def to_dataframe(self, dtype: Optional[type] = float):
+        data_objs = {}
+        for key in self._keys:
+            if key in self._period_config:
+                period = self._period_config[key]
+                data_objs[f"{self.__class__.__name__}_{key}_{period}"] = self.to_numpy(
+                    get=key, dtype=dtype
+                )
+        return pd.DataFrame(data_objs)
+
+
+#  and isinstance(getattr(self, f"_{k}"), Iterable)

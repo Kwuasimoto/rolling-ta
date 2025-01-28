@@ -1,5 +1,5 @@
 from array import array
-from typing import Any, Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -8,38 +8,65 @@ from rolling_ta.extras.numba import _stoch_k, _stoch_d
 from rolling_ta.indicator import Indicator
 from rolling_ta.momentum import RSI, RSI
 
+from .rsi import RelativeStrengthIndexKeys
+
+StochasticRSIKeys = Union[Literal["stoch_k", "stoch_d"], RelativeStrengthIndexKeys]
+StochasticRSIPeriods = Union[Literal["stoch_rsi", StochasticRSIKeys]]
+
 
 class StochasticRSI(Indicator):
 
-    _period_default = {"rsi": 14, "stoch": 10, "k": 3, "d": 3}
+    _keys: List[StochasticRSIKeys] = [
+        "rsi",
+        "stoch_rsi",
+        "stoch_d",
+    ]
+    _period_default: Dict[StochasticRSIPeriods, int] = {
+        "rsi": 14,
+        "stoch_rsi": 10,
+        "stoch_k": 3,
+        "stoch_d": 3,
+    }
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: Dict[str, int] = {"rsi": 14, "stoch": 10, "k": 3, "d": 3},
+        keys: List[StochasticRSIKeys] = _keys,
+        period_config: Dict[StochasticRSIPeriods, int] = _period_default,
         memory: bool = True,
         retention: Optional[None] = None,
         init: bool = False,
-        columns: Optional[list[str]] = None,
         rsi: Optional[RSI] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
+
+        if "rsi" not in self._period_config:
+            self._period_config.update({"rsi": 14})
 
         self._rsi = (
-            RSI(data, period_config["rsi"], memory, retention, columns, init)
+            RSI(
+                data,
+                keys=["rsi"],
+                period_config={"rsi": self._period_config["rsi"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if rsi is None
             else rsi
         )
 
-        self._k_period = self.period("stoch")
-        self._k_smoothing = self.period("k")
-        self._d_smoothing = self.period("d")
-
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
-    def calc(self, rsi: np.ndarray[np.float64] | None = None):
+    def calc(self):
         if not self._rsi._initialized:
             self._rsi.calc()
 
@@ -49,73 +76,63 @@ class StochasticRSI(Indicator):
         self._window = _stoch_k(
             rsi,
             stoch_k,
-            self._rsi._period_config,
-            self._k_period,
-            self._k_smoothing,
+            self._rsi._period_config["rsi"],
+            self._period_config["stoch_rsi"],
+            self._period_config["stoch_k"],
         )
 
-        if self._d_smoothing > 0:
+        if self._period_config["stoch_d"] > 0:
             stoch_d = np.array(stoch_k, dtype=np.float64)
             _stoch_d(
                 stoch_k,
                 stoch_d,
-                self._rsi._period_config,
-                self._k_period,
-                self._d_smoothing,
+                self._rsi._period_config["rsi"],
+                self._period_config["stoch_rsi"],
+                self._period_config["stoch_d"],
             )
 
         if self._memory:
-            self._k = array("d", stoch_k)
+            self._stoch_rsi = array("d", stoch_k)
 
             if stoch_d is not None:
-                self._d = array("d", stoch_d)
-
-        if self._columns is None:
-            self.set_columns()
+                self._stoch_d = array("d", stoch_d)
 
         return self
 
     def update(self, data: pd.Series):
         return super().update(data, __name__)
 
-    def fit(self, data, period_config: Optional[Dict[str, Any]] = None):
+    def fit(
+        self,
+        data,
+        period_config: Optional[Dict[StochasticRSIPeriods, int]] = _period_default,
+    ):
         super().fit(data, period_config)
-        self._rsi.fit(
-            data,
-            self._rsi._period_config if period_config is None else period_config["rsi"],
-        )
+        if set(period_config.keys()) & set(self._rsi._period_config.keys()):
+            self._rsi.fit(data, period_config)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            (
-                [
-                    f"stoch_rsi_{self._k_period}",
-                    f"stoch_rsi_k_{self._k_smoothing}",
-                    f"stoch_rsi_d_{self._d_smoothing}",
-                ]
-                if columns is None
-                else columns
-            ),
-            name,
-        )
-        self._rsi.set_columns(f"rsi_{self._rsi._period_config}")
-
-    def to_array(self, get: Literal["k", "d"] = "k"):
+    def to_array(self, get: StochasticRSIKeys = "stoch_k"):
+        if get == "rsi":
+            return self._rsi.to_array(get)
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["k", "d"] = "k",
-        dtype: np.dtype | None = np.float64,
+        get: StochasticRSIKeys = "stoch_k",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
+        if get == "rsi":
+            return self._rsi.to_numpy(get, dtype, **kwargs)
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["k", "d"] = "k",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: StochasticRSIKeys = "stoch_k",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
+        if get == "rsi":
+            return self._rsi.to_series(get, dtype, name, **kwargs)
         return super().to_series(get, dtype, name, **kwargs)

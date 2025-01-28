@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -7,24 +7,34 @@ import pandas as pd
 from rolling_ta.extras.numba import _bop
 from rolling_ta.indicator import Indicator
 
-from rolling_ta.logging import log
+BalanceOfPowerPeriods = Literal["bop"]
+BalanceOfPowerKeys = Literal["bop"]
 
 
 class BOP(Indicator):
     """Balance of Power"""
 
+    _keys: List[BalanceOfPowerKeys] = ["bop"]
+    _period_config: Dict[BalanceOfPowerPeriods, int] = {"bop": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[BalanceOfPowerKeys] = _keys,
+        period_config: Dict[BalanceOfPowerPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -35,41 +45,46 @@ class BOP(Indicator):
 
         bop = np.zeros(close.size, dtype=np.float64)
 
-        _bop(open, high, low, close, bop, self._period_config)
+        _bop(
+            open=open,
+            high=high,
+            low=low,
+            close=close,
+            bop_container=bop,
+            smoothing=self._period_config["bop"],
+        )
 
         if self._memory:
             self._bop = array("d", bop)
-
-        if self._columns is None:
-            self.set_columns()
 
         self.drop_data()
         self.set_initialized()
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"bop_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(
+        self,
+        data,
+        period_config: Dict[BalanceOfPowerPeriods, int] = _period_config,
+    ):
+        super().fit(data, period_config)
 
-    def to_array(self, get: Literal["bop"] = "bop"):
+    def to_array(self, get: BalanceOfPowerKeys = "bop"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["bop"] = "bop",
-        dtype: np.dtype | None = np.float64,
+        get: BalanceOfPowerKeys = "bop",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["bop"] = "bop",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: BalanceOfPowerKeys = "bop",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
-    ):
+    ) -> pd.Series:
         return super().to_series(get, dtype, name, **kwargs)

@@ -1,3 +1,4 @@
+import pandas as pd
 import pytest
 
 from rolling_ta.momentum.bop import BOP
@@ -22,101 +23,101 @@ from rolling_ta.volume.obv import OBV
 from rolling_ta.volume.vwap import VWAP
 
 
-@pytest.fixture(autouse=True, name="bop")
+@pytest.fixture(name="bop")
 def bop():
     return BOP()
 
 
-@pytest.fixture(autouse=True, name="rsi")
+@pytest.fixture(name="rsi")
 def rsi():
     return RSI()
 
 
-@pytest.fixture(autouse=True, name="stoch_rsi")
+@pytest.fixture(name="stoch_rsi")
 def stoch_rsi():
     return StochasticRSI()
 
 
-@pytest.fixture(autouse=True, name="ichimoku")
+@pytest.fixture(name="ichimoku")
 def ichimoku():
     return IchimokuCloud()
 
 
-@pytest.fixture(autouse=True, name="adx")
+@pytest.fixture(name="adx")
 def adx():
     return ADX()
 
 
-@pytest.fixture(autouse=True, name="dmi")
+@pytest.fixture(name="dmi")
 def dmi():
     return DMI()
 
 
-@pytest.fixture(autouse=True, name="donchian_channels")
+@pytest.fixture(name="donchian_channels")
 def donchian_channels():
     return DonchianChannels()
 
 
-@pytest.fixture(autouse=True, name="ema")
+@pytest.fixture(name="ema")
 def ema():
     return EMA()
 
 
-@pytest.fixture(autouse=True, name="hma")
+@pytest.fixture(name="hma")
 def hma():
     return HMA()
 
 
-@pytest.fixture(autouse=True, name="lr")
+@pytest.fixture(name="lr")
 def lr():
     return LinearRegression()
 
 
-@pytest.fixture(autouse=True, name="lr2")
+@pytest.fixture(name="lr2")
 def lr2():
     return LinearRegressionR2()
 
 
-@pytest.fixture(autouse=True, name="lrf")
+@pytest.fixture(name="lrf")
 def lrf():
     return LinearRegressionForecast()
 
 
-@pytest.fixture(autouse=True, name="sma")
+@pytest.fixture(name="sma")
 def sma():
     return SMA()
 
 
-@pytest.fixture(autouse=True, name="wma")
+@pytest.fixture(name="wma")
 def wma():
     return WMA()
 
 
-@pytest.fixture(autouse=True, name="atr")
+@pytest.fixture(name="atr")
 def atr():
     return AverageTrueRange()
 
 
-@pytest.fixture(autouse=True, name="bollinger_bands")
+@pytest.fixture(name="bollinger_bands")
 def bollinger_bands():
     return BollingerBands()
 
 
-@pytest.fixture(autouse=True, name="true_range")
+@pytest.fixture(name="true_range")
 def true_range():
     return TrueRange()
 
 
-@pytest.fixture(autouse=True, name="mfi")
+@pytest.fixture(name="mfi")
 def mfi():
     return MFI()
 
 
-@pytest.fixture(autouse=True, name="obv")
+@pytest.fixture(name="obv")
 def obv():
     return OBV()
 
 
-@pytest.fixture(autouse=True, name="vwap")
+@pytest.fixture(name="vwap")
 def vwap():
     return VWAP()

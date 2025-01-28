@@ -1,11 +1,15 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _ema, _ema_update
 from rolling_ta.indicator import Indicator
+
+
+EMAKeys = Literal["ema"]
+EMAPeriods = Literal["ema", "weight"]
 
 
 class EMA(Indicator):
@@ -20,20 +24,33 @@ class EMA(Indicator):
         https://www.investopedia.com/terms/e/ema.asp
     """
 
+    _keys: List[EMAKeys] = ["ema", "weight"]
+    _period_config: Dict[EMAPeriods, int] = {"ema": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 14,
+        keys: List[EMAKeys] = _keys,
+        period_config: Dict[EMAPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         weight: np.float64 = 2.0,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
-        self._weight = weight / (period_config + 1)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
+        self._weight = (
+            weight / (period_config["ema"] + 1)
+            if "weight" not in period_config
+            else period_config["weight"]
+        )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -44,16 +61,13 @@ class EMA(Indicator):
             close,
             ema,
             self._weight,
-            self._period_config,
+            self._period_config["ema"],
         )
 
         self._ema_latest = ema_latest
 
         if self._memory:
             self._ema = array("d", ema)
-
-        if self._columns is None:
-            self.set_columns()
 
         self.drop_data()
         self.set_initialized()
@@ -68,28 +82,25 @@ class EMA(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"ema_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(self, data, period_config=_period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["ema"] = "ema"):
+    def to_array(self, get: EMAKeys = "ema"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["ema"] = "ema",
-        dtype: np.dtype | None = np.float64,
+        get: EMAKeys = "ema",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["ema"] = "ema",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: EMAKeys = "ema",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

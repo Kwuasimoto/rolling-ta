@@ -1,8 +1,8 @@
 import numpy as np
 import pandas as pd
 
-from tests.fixtures.eval import Eval
 from rolling_ta.trend import SMA
+from tests.fixtures.helpers import Eval, ValidateSeries, ValidateDataFrame
 
 
 def test_sma(sma: SMA, sma_df: pd.DataFrame, evaluate: Eval):
@@ -26,3 +26,13 @@ def test_sma_update(sma: SMA, sma_df: pd.DataFrame, evaluate: Eval):
         sma.to_numpy(dtype=np.float64),
         "SMA_UPDATE",
     )
+
+
+def test_sma_to_series(sma: SMA, sma_df: pd.DataFrame, validate_series: ValidateSeries):
+    validate_series(sma, sma_df, "sma")
+
+
+def test_sma_dataframe(
+    sma: SMA, sma_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
+):
+    validate_dataframe(sma, sma_df, ["sma_14"])

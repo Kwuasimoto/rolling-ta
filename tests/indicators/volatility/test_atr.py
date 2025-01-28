@@ -1,8 +1,9 @@
+from wsgiref import validate
 import numpy as np
 import pandas as pd
 
-from tests.fixtures.eval import Eval
 from rolling_ta.volatility import AverageTrueRange
+from tests.fixtures.helpers import Eval, ValidateSeries, ValidateDataFrame
 
 
 def test_atr(atr: AverageTrueRange, atr_df: pd.DataFrame, evaluate: Eval):
@@ -26,3 +27,15 @@ def test_atr_update(atr: AverageTrueRange, atr_df: pd.DataFrame, evaluate: Eval)
         atr.to_numpy(dtype=np.float64),
         "ATR_UPDATE",
     )
+
+
+def test_atr_to_series(
+    atr: AverageTrueRange, atr_df: pd.DataFrame, validate_series: ValidateSeries
+):
+    validate_series(atr, atr_df, "atr")
+
+
+def test_atr_to_dataframe(
+    atr: AverageTrueRange, atr_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
+):
+    validate_dataframe(atr, atr_df, ["atr_14", "tr_14"])

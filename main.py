@@ -29,22 +29,26 @@
 #     # write_xlsx_file()
 #     ...
 
+from rolling_ta.momentum import BOP
+from rolling_ta.data import CSVLoader
 
-from rolling_ta.data.csv_loader import CSVLoader
-from rolling_ta.logging import log
-from rolling_ta.trend.ema import EMA
+test_list = ["a", "b", "c"]
+test_dict = {"a": 0}
+
 
 if __name__ == "__main__":
-    columns = None
-    cols = (
-        {
-            "tenkan": 9,
-            "kijun": 12,
-            "senkou_a": 12 + 9,
-            "senkou_b": 52,
-        }
-        if columns is None
-        else columns
-    )
+    loader = CSVLoader()
+    df = loader.read_resource()
 
-    print(type(cols))
+    bop = BOP(data=df, init=True)
+
+    df = bop.to_dataframe()
+
+    df.info()
+
+    # test_dict = {"a": 0, "b": 1, "c": 2}
+
+    # # bop = BOP(data=df, init=True)
+    # # print(bop._period_config)
+    # # print(bop.to_series().name)
+    # print(test_dict.fromkeys(["a", "b"]))

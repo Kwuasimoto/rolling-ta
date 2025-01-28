@@ -15,9 +15,7 @@ class MACD(Indicator):
         init: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, columns, init)
-
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):

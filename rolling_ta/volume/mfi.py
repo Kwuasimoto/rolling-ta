@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -15,6 +15,9 @@ from rolling_ta.extras.numba import (
     _typical_price_single,
 )
 from rolling_ta.indicator import Indicator
+
+MFIKeys = Literal["mfi"]
+MFIPeriods = Literal["mfi"]
 
 
 class MFI(Indicator):
@@ -32,18 +35,27 @@ class MFI(Indicator):
      - https://pypi.org/project/ta/
     """
 
+    _keys: List[MFIKeys] = ["mfi"]
+    _period_config: Dict[MFIPeriods, int] = {"mfi": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period: int = 14,
+        keys: List[MFIKeys] = _period_config,
+        period_config: Dict[MFIPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period, memory, retention, columns, init)
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -64,10 +76,10 @@ class MFI(Indicator):
 
         pmf_sums = np.zeros(volume.size, dtype=np.float64)
         nmf_sums = np.zeros(volume.size, dtype=np.float64)
-        _mf_pos_neg_sum(pmf, nmf, pmf_sums, nmf_sums, self._period_config)
+        _mf_pos_neg_sum(pmf, nmf, pmf_sums, nmf_sums, self._period_config["mfi"])
 
         mfi = np.zeros(volume.size, dtype=np.float64)
-        _mfi(pmf_sums, nmf_sums, mfi, self._period_config)
+        _mfi(pmf_sums, nmf_sums, mfi, self._period_config["mfi"])
 
         if self._memory:
             self._mfi = array("f", mfi)
@@ -76,8 +88,8 @@ class MFI(Indicator):
 
         self._pmf_sum = pmf_sums[-1]
         self._nmf_sum = nmf_sums[-1]
-        self._pmf_window = pmf[-self._period_config :]
-        self._nmf_window = nmf[-self._period_config :]
+        self._pmf_window = pmf[-self._period_config["mfi"] :]
+        self._nmf_window = nmf[-self._period_config["mfi"] :]
 
         self.drop_data()
         self.set_initialized()
@@ -89,16 +101,16 @@ class MFI(Indicator):
         typical_price = _typical_price_single(data["high"], data["low"], data["close"])
 
         self._pmf_sum, self._nmf_sum = _mf_update(
-            volume,
-            typical_price,
-            self._typical_price_prev,
-            self._pmf_window,
-            self._nmf_window,
-            self._pmf_sum,
-            self._nmf_sum,
+            volume=volume,
+            price_curr=typical_price,
+            price_prev=self._typical_price_prev,
+            pmf_window=self._pmf_window,
+            nmf_window=self._nmf_window,
+            pmf_sum=self._pmf_sum,
+            nmf_sum=self._nmf_sum,
         )
 
-        mfi = _mfi_update(self._pmf_sum, self._nmf_sum)
+        mfi = _mfi_update(pmf_sum=self._pmf_sum, nmf_sum=self._nmf_sum)
 
         self._typical_price_prev = typical_price
 
@@ -107,28 +119,25 @@ class MFI(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"mfi_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(self, data, period_config: MFIPeriods = _period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["mfi"] = "mfi"):
+    def to_array(self, get: MFIKeys = "mfi"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["mfi"] = "mfi",
-        dtype: np.dtype | None = np.float64,
+        get: MFIKeys = "mfi",
+        dtype: np.dtype = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["mfi"] = "mfi",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: MFIKeys = "mfi",
+        dtype: type = float,
+        name: str = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

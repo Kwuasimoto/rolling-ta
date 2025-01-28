@@ -1,40 +1,62 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _linear_regression_forecast
 from rolling_ta.indicator import Indicator
-from rolling_ta.trend import LinearRegression
+
+from .lr import LinearRegression, LinearRegressionKeys, LinearRegressionPeriods
+
+
+LinearRegressionForecastKeys = Union[Literal["lrf"], LinearRegressionKeys]
+LinearRegressionForecastPeriods = Union[Literal["lrf"], LinearRegressionPeriods]
 
 
 class LinearRegressionForecast(Indicator):
 
-    _period_default = {"lr": 14, "lrf": 14}
+    _keys: List[LinearRegressionForecastKeys] = [
+        "lrf",
+        "price",
+        "slope",
+        "intercept",
+    ]
+    _period_default: Dict[LinearRegressionForecastPeriods, int] = {
+        "price": 14,
+        "lrf": 14,
+    }
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int | Dict[str, int] = {"lr": 14, "lrf": 14},
+        keys: List[LinearRegressionForecastKeys] = _keys,
+        period_config: Dict[LinearRegressionForecastPeriods, int] = _period_default,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         lr: Optional[LinearRegression] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
-
+        super().__init__(data, keys, period_config, memory, retention, init)
+        if "price" not in self._period_config:
+            self._period_config["price"] = self._period_config["lrf"]
+        if "intercept" not in self._period_config:
+            self._period_config["intercept"] = self._period_config["price"]
+        if "slope" not in self._period_config:
+            self._period_config["slope"] = self._period_config["price"]
         self._lr = (
             LinearRegression(
-                data, period_config["lr"], memory, retention, columns, init
+                data,
+                keys=["intercept", "price", "slope"],
+                period_config={"price": self._period_config["price"]},
+                memory=memory,
+                retention=retention,
+                init=init,
             )
             if lr is None
             else lr
         )
-
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -50,10 +72,7 @@ class LinearRegressionForecast(Indicator):
         )
 
         if self._memory:
-            self._forecast = array("d", forecast)
-
-        if self._columns is None:
-            self.set_columns()
+            self._lrf = array("d", forecast)
 
         self.drop_data()
         self.set_initialized()
@@ -63,26 +82,12 @@ class LinearRegressionForecast(Indicator):
     def update(self, data: pd.Series):
         super().update(data, __name__)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"lrf_{self._period_config['lrf']}" if columns is None else columns, name
-        )
-        self._lr.set_columns(f"lr_{self._lr._period_config}")
-
-    def fit(self, data, period_config: Optional[Dict[str, int]] = None):
+    def fit(self, data, period_config: Optional[Dict[str, int]] = _period_default):
         super().fit(data, period_config)
-        self._lr.fit(
-            data,
-            period_config=(
-                self._lr._period_config
-                if period_config is None
-                else period_config["lr"]
-            ),
-        )
+        if set(period_config.keys()) & (self._lr._period_config.keys()):
+            self._lr.fit(data, period_config={"price": period_config["price"]})
 
-    def to_array(
-        self, get: Literal["forecast", "slope", "intercept", "price"] = "forecast"
-    ):
+    def to_array(self, get: LinearRegressionForecastKeys = "lrf"):
         if get == "slope":
             return self._lr.to_array(get)
         elif get == "intercept":
@@ -93,8 +98,8 @@ class LinearRegressionForecast(Indicator):
 
     def to_numpy(
         self,
-        get: Literal["forecast", "slope", "intercept", "price"] = "forecast",
-        dtype: np.dtype | None = np.float64,
+        get: LinearRegressionForecastKeys = "lrf",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         if get == "slope":
@@ -107,9 +112,9 @@ class LinearRegressionForecast(Indicator):
 
     def to_series(
         self,
-        get: Literal["forecast", "slope", "intercept", "price"] = "forecast",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: LinearRegressionForecastKeys = "lrf",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         if get == "slope":
@@ -118,4 +123,5 @@ class LinearRegressionForecast(Indicator):
             return self._lr.to_series(get, dtype, name, **kwargs)
         elif get == "price":
             return self._lr.to_series(get, dtype, name, **kwargs)
+
         return super().to_series(get, dtype, name, **kwargs)

@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -9,34 +9,65 @@ from rolling_ta.trend.wma import WMA
 from rolling_ta.indicator import Indicator
 
 
+HMAKeys = Literal["hma", "wma_full", "wma_half"]
+HMAPeriods = HMAKeys
+
+
 class HMA(Indicator):
+
+    _keys: List[HMAKeys] = ["hma", "wma_full", "wma_half"]
+    _period_config: Dict[HMAPeriods, int] = {"hma": 14, "wma_full": 14}
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int | Dict[str, int] = 14,
+        keys: List[HMAKeys] = _keys,
+        period_config: Dict[HMAPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         wma_full: Optional[WMA] = None,
         wma_half: Optional[WMA] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
-
+        super().__init__(
+            data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+        )
+        if "wma_full" not in self._period_config:
+            self._period_config.update({"wma_full": self._period_config["hma"]})
+        if "wma_half" not in self._period_config:
+            self._period_config.update(
+                {"wma_half": self._period_config["wma_full"] // 2}
+            )
         self._wma_full = (
-            WMA(data, period_config, memory, retention, init)
+            WMA(
+                data,
+                keys=["wma"],
+                period_config={"wma": self._period_config["wma_full"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if wma_full is None
             else wma_full
         )
         self._wma_half = (
-            WMA(data, period_config // 2, memory, retention, init)
+            WMA(
+                data,
+                keys=["wma"],
+                period_config={"wma": self._period_config["wma_half"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if wma_half is None
             else wma_half
         )
-
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -46,53 +77,61 @@ class HMA(Indicator):
             self._wma_half.calc()
 
         close = self._data["close"].to_numpy(dtype=np.float64)
-
         wma_full = self._wma_full.to_numpy()
         wma_half = self._wma_half.to_numpy()
-
         hma_internim = np.zeros(close.size, dtype=np.float64)
         hma = np.zeros(close.size, dtype=np.float64)
 
-        _hma(wma_full, wma_half, hma_internim, hma, self._period_config)
+        _hma(
+            wma_full=wma_full,
+            wma_half=wma_half,
+            hma_internim=hma_internim,
+            hma_container=hma,
+            hma_period=self._period_config["hma"],
+        )
 
         if self._memory:
             self._hma = array("d", hma)
-
-        if self._columns is None:
-            self.set_columns()
-
         self.drop_data()
         self.set_initialized()
 
         return self
 
-    def fit(self, data):
-        super().fit(data)
-        self._wma_half.fit(data)
-        self._wma_full.fit(data)
+    def fit(self, data, period_config: HMAPeriods = _period_config):
+        super().fit(data, period_config)
+        if "wma_full" in period_config:
+            self._wma_full.fit(data, period_config={"wma": period_config["wma_full"]})
+        if "wma_half" in period_config:
+            self._wma_half.fit(data, period_config={"wma": period_config["wma_half"]})
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"hma_{self._period_config}" if columns is None else columns,
-            name,
-        )
-
-    def to_array(self, get: Literal["hma"] = "hma"):
+    def to_array(self, get: HMAKeys = "hma"):
+        if get == "wma_full":
+            return self._wma_full.to_array("wma")
+        elif get == "wma_half":
+            return self._wma_half.to_array("wma")
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["hma"] = "hma",
-        dtype: np.dtype | None = np.float64,
+        get: HMAKeys = "hma",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
+        if get == "wma_full":
+            return self._wma_full.to_numpy("wma", dtype, **kwargs)
+        elif get == "wma_half":
+            return self._wma_half.to_numpy("wma", dtype, **kwargs)
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["hma"] = "hma",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: HMAKeys = "hma",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
+        if get == "wma_full":
+            return self._wma_full.to_series("wma", dtype, name, **kwargs)
+        elif get == "wma_half":
+            return self._wma_half.to_series("wma", dtype, name, **kwargs)
         return super().to_series(get, dtype, name, **kwargs)

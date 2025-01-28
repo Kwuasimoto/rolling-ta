@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -7,6 +7,10 @@ import pandas as pd
 from rolling_ta.extras.numba import _bollinger_bands
 from rolling_ta.trend.sma import SMA
 from rolling_ta.indicator import Indicator
+
+
+BollingerBandsKeys = Literal["bb", "ma"]
+BollingerBandsPeriods = Union[Literal["weight"], BollingerBandsKeys]
 
 
 class BollingerBands(Indicator):
@@ -22,27 +26,48 @@ class BollingerBands(Indicator):
         https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-overlays/bollinger-bands
     """
 
+    _keys: List[BollingerBandsKeys] = ["upper", "lower", "ma"]
+    _period_config: Dict[BollingerBandsPeriods, int] = {"bb": 20, "ma": 20, "weight": 2}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int | Dict[str, int] = 20,
+        keys: List[BollingerBandsKeys] = _keys,
+        period_config: Dict[BollingerBandsPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
         moving_average: Optional[Indicator] = None,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(data, keys, period_config, memory, retention, init)
 
         # Use simple moving average if user does not supply a moving average.
+        if "ma" not in self._period_config:
+            self._period_config["ma"] = self._period_config["bb"]
+
+        # TODO
+        # This is a problem in multiple indicators, will need to be refactored eventually:
+        # The problem is coupling the period config to a indicator object in memory
+        # This needs to be dealt with sooner than later.
+        if "upper" not in self._period_config:
+            self._period_config["upper"] = self._period_config["ma"]
+        if "lower" not in self._period_config:
+            self._period_config["lower"] = self._period_config["ma"]
+
         self._ma = (
-            SMA(data, period_config, memory, retention, columns, init)
+            SMA(
+                data,
+                keys=["sma"],
+                period_config={"sma": self._period_config["ma"]},
+                memory=memory,
+                retention=retention,
+                init=init,
+            )
             if moving_average is None
             else moving_average
         )
 
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -54,7 +79,14 @@ class BollingerBands(Indicator):
         upper = np.zeros(ma.size, dtype=np.float64)
         lower = np.zeros(ma.size, dtype=np.float64)
 
-        _bollinger_bands(close, ma, upper, lower, self._period_config)
+        _bollinger_bands(
+            price=close,
+            ma=ma,
+            upper_container=upper,
+            lower_container=lower,
+            period=self._period_config["bb"],
+            weight=self._period_config["weight"],
+        )
 
         if self._memory:
             self._upper = array("d", upper)
@@ -65,30 +97,23 @@ class BollingerBands(Indicator):
 
         return self
 
-    def fit(self, data):
-        super().fit(data)
-        self._ma.fit(data)
+    def fit(
+        self,
+        data: pd.DataFrame,
+        period_config: Dict[BollingerBandsPeriods, int] = _period_config,
+    ):
+        super().fit(data, period_config)
+        self._ma.fit(data, period_config)
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            (
-                {"bb_upper": self._period_config, "bb_lower": self._period_config}
-                if columns is None
-                else columns
-            ),
-            name,
-        )
-        self._ma.set_columns(f"bb_center_{self._ma._period_config}")
-
-    def to_array(self, get: Literal["ma", "upper", "lower"] = "ma"):
+    def to_array(self, get: BollingerBandsKeys = "ma"):
         if get == "ma":
             return self._ma.to_array()
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["ma", "upper", "lower"] = "ma",
-        dtype: np.dtype | None = np.float64,
+        get: BollingerBandsKeys = "ma",
+        dtype: Optional[np.dtype] = np.float64,
     ):
         if get == "ma":
             return self._ma.to_numpy(dtype=dtype)
@@ -96,9 +121,9 @@ class BollingerBands(Indicator):
 
     def to_series(
         self,
-        get: Literal["ma", "upper", "lower"] = "ma",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: BollingerBandsKeys = "ma",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
     ):
         if get == "ma":
             return self._ma.to_series(dtype=dtype, name=name)

@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from tests.fixtures.eval import Eval
+from tests.fixtures.helpers import Eval, ValidateSeries, ValidateDataFrame
+
+
 from rolling_ta.momentum import RSI
 
 
@@ -26,3 +28,13 @@ def test_rsi_update(rsi: RSI, rsi_df: pd.DataFrame, evaluate: Eval):
         rsi.to_numpy(dtype=np.float64),
         "RSI_UPDATE",
     )
+
+
+def test_rsi_to_series(rsi: RSI, rsi_df: pd.DataFrame, validate_series: ValidateSeries):
+    validate_series(rsi, rsi_df, "rsi")
+
+
+def test_rsi_to_dataframe(
+    rsi: RSI, rsi_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
+):
+    validate_dataframe(rsi, rsi_df, ["rsi_14"])

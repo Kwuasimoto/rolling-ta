@@ -1,5 +1,5 @@
 from array import array
-from typing import Literal, Optional, Union, Dict
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -7,20 +7,26 @@ import numpy as np
 from rolling_ta.extras.numba import _obv, _obv_update
 from rolling_ta.indicator import Indicator
 
+OBVKeys = Literal["obv"]
+OBVPeriods = Literal["obv"]
+
 
 class OBV(Indicator):
+
+    _keys: List[OBVKeys] = ["obv"]
+    _period_config: Dict[OBVPeriods, int] = {"obv": 14}
+
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: Optional[int] = None,
+        keys: List[OBVKeys] = _keys,
+        period_config: Dict[OBVPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
+        super().__init__(data, keys, period_config, memory, retention, init)
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -28,7 +34,11 @@ class OBV(Indicator):
         volume = self._data["volume"].to_numpy(np.float64)
         obv = np.zeros(close.size, dtype=np.float64)
 
-        obv, obv_latest, close_latest = _obv(close, volume, obv)
+        obv, obv_latest, close_latest = _obv(
+            close=close,
+            volume=volume,
+            obv_container=obv,
+        )
 
         if self._memory:
             self._obv = array("f", obv)
@@ -45,7 +55,10 @@ class OBV(Indicator):
         close = data["close"]
 
         self._obv_latest = _obv_update(
-            close, data["volume"], self._close_p, self._obv_latest
+            close=close,
+            volume=data["volume"],
+            close_p=self._close_p,
+            obv_latest=self._obv_latest,
         )
 
         if self._memory:
@@ -55,28 +68,25 @@ class OBV(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        super().set_columns(
-            f"obv_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(self, data, period_config: OBVPeriods = _period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["obv"] = "obv"):
+    def to_array(self, get: OBVKeys = "obv"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["obv"] = "obv",
-        dtype: np.dtype | None = np.float64,
+        get: OBVKeys = "obv",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["obv"] = "obv",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: OBVKeys = "obv",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)

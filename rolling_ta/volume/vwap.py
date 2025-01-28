@@ -1,5 +1,5 @@
 from array import array
-from typing import Dict, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
@@ -7,22 +7,26 @@ import numpy as np
 from rolling_ta.extras.numba import _typical_price, _vwap
 from rolling_ta.indicator import Indicator
 
+VWAPKeys = Literal["vwap"]
+VWAPPeriods = Literal["vwap"]
+
 
 class VWAP(Indicator):
+
+    _keys: List[VWAPKeys] = ["vwap"]
+    _period_config: Dict[VWAPPeriods, int] = {"vwap": 1440}
 
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        period_config: int = 1440,
+        keys: List[VWAPKeys] = _keys,
+        period_config: Dict[VWAPPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
-        columns: Optional[list[str]] = None,
         init: bool = False,
     ) -> None:
-        super().__init__(data, period_config, memory, retention, columns, init)
-
+        super().__init__(data, keys, period_config, memory, retention, init)
         if self._init:
-            self.set_columns(columns)
             self.calc()
 
     def calc(self):
@@ -37,7 +41,7 @@ class VWAP(Indicator):
         _typical_price(high, low, close, typical_price)
 
         vwap = np.zeros(typical_price.size, dtype=np.float64)
-        _vwap(timestamp, typical_price, volume, vwap, self._period_config)
+        _vwap(timestamp, typical_price, volume, vwap, self._period_config["vwap"])
 
         if self._memory:
             self._vwap = array("d", vwap)
@@ -47,28 +51,25 @@ class VWAP(Indicator):
 
         return self
 
-    def set_columns(self, columns=None, name=None):
-        return super().set_columns(
-            f"vwap_{self._period_config}" if columns is None else columns,
-            name,
-        )
+    def fit(self, data, period_config: VWAPPeriods = _period_config):
+        return super().fit(data, period_config)
 
-    def to_array(self, get: Literal["vwap"] = "vwap"):
+    def to_array(self, get: VWAPKeys = "vwap"):
         return super().to_array(get)
 
     def to_numpy(
         self,
-        get: Literal["vwap"] = "vwap",
-        dtype: np.dtype | None = np.float64,
+        get: VWAPKeys = "vwap",
+        dtype: Optional[np.dtype] = np.float64,
         **kwargs,
     ):
         return super().to_numpy(get, dtype, **kwargs)
 
     def to_series(
         self,
-        get: Literal["vwap"] = "vwap",
-        dtype: type | None = float,
-        name: str | None = None,
+        get: VWAPKeys = "vwap",
+        dtype: Optional[type] = float,
+        name: Optional[str] = None,
         **kwargs,
     ):
         return super().to_series(get, dtype, name, **kwargs)
