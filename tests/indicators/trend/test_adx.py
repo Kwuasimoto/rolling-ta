@@ -72,3 +72,29 @@ def test_adx_to_dataframe(
     adx: ADX, adx_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(adx, adx_df, ["adx_14", "dx_14", "pdmi_14", "ndmi_14", "tr_14"])
+
+
+def test_adx_drop_values(adx: ADX, adx_df: pd.DataFrame):
+    adx.fit(adx_df)
+    adx.calc()
+    adx.drop_values()
+    assert not hasattr(adx, "_adx"), f"Failed to drop ADX._adx {adx._adx}"
+    assert not hasattr(adx, "_dx"), f"Failed to drop ADX._dx {adx._dx}"
+    assert not hasattr(
+        adx._dmi, "_pdmi"
+    ), f"Failed to drop ADX.DMI._pdmi {adx._dmi._pdmi}"
+    assert not hasattr(
+        adx._dmi, "_ndmi"
+    ), f"Failed to drop ADX.DMI._ndmi {adx._dmi._ndmi}"
+    assert not hasattr(
+        adx._dmi._tr, "_tr"
+    ), f"Failed to drop ADX.DMI.TR._tr {adx._dmi._tr._tr}"
+
+
+def test_adx_set_initialized(adx: ADX, adx_df: pd.DataFrame):
+    adx.fit(adx_df)
+    adx.calc()
+    adx.set_initialized(state=False)
+    assert not adx._initialized, f"Failed to set ADX._initialized"
+    assert not adx._dmi._initialized, f"Failed to set ADX.DMI._initialized"
+    assert not adx._dmi._tr._initialized, f"Failed to set ADX.DMI.TR._initialized"

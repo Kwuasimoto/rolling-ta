@@ -77,3 +77,31 @@ def test_donchian_channels_to_dataframe(
     validate_dataframe(
         donchian_channels, donchian_channels_df, ["highs_14", "center_14", "lows_14"]
     )
+
+
+def test_donchian_channels_drop_values(
+    donchian_channels: DonchianChannels, donchian_channels_df: pd.DataFrame
+):
+    donchian_channels.fit(donchian_channels_df)
+    donchian_channels.calc()
+    donchian_channels.drop_values()
+    assert not hasattr(
+        donchian_channels, "_highs"
+    ), f"Failed to delete DonchianChannels._tenkan attribute. {donchian_channels._highs}"
+    assert not hasattr(
+        donchian_channels, "_center"
+    ), f"Failed to delete DonchianChannels._kijun attribute. {donchian_channels._center}"
+    assert not hasattr(
+        donchian_channels, "_lows"
+    ), f"Failed to delete DonchianChannels._senkou_a attribute. {donchian_channels._lows}"
+
+
+def test_donchian_channels_set_initialized(
+    donchian_channels: DonchianChannels, donchian_channels_df: pd.DataFrame
+):
+    donchian_channels.fit(donchian_channels_df)
+    donchian_channels.calc(initialization_state=True)
+    donchian_channels.set_initialized(state=False)
+    assert (
+        not donchian_channels._initialized
+    ), f"Failed to set DonchianChannels._initialized to false. {donchian_channels._initialized}"

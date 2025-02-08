@@ -28,6 +28,8 @@ class HMA(Indicator):
         init: bool = False,
         wma_full: Optional[WMA] = None,
         wma_half: Optional[WMA] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -36,6 +38,8 @@ class HMA(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if "wma_full" not in self._period_config:
             self._period_config.update({"wma_full": self._period_config["hma"]})
@@ -51,6 +55,8 @@ class HMA(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if wma_full is None
             else wma_full
@@ -63,18 +69,32 @@ class HMA(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if wma_half is None
             else wma_half
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: bool = False):
+        if self._initialized and not force:
+            return
+
         if not self._wma_full._initialized:
-            self._wma_full.calc()
+            self._wma_full.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
         if not self._wma_half._initialized:
-            self._wma_half.calc()
+            self._wma_half.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         close = self._data["close"].to_numpy(dtype=np.float64)
         wma_full = self._wma_full.to_numpy()
@@ -92,8 +112,9 @@ class HMA(Indicator):
 
         if self._memory:
             self._hma = array("d", hma)
+
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

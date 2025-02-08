@@ -1,4 +1,3 @@
-from wsgiref import validate
 import numpy as np
 import pandas as pd
 
@@ -13,7 +12,6 @@ from tests.fixtures.helpers import (
     Eval,
     ValidateSeries,
     ValidateDataFrame,
-    validate_dataframe,
 )
 
 
@@ -81,6 +79,33 @@ def test_lr_to_dataframe(
     validate_dataframe(lr, lr_df, ["price_14", "slope_14", "intercept_14"])
 
 
+def test_lr_drop_values(
+    lr: LinearRegression,
+    lr_df: pd.DataFrame,
+):
+    lr.fit(lr_df)
+    lr.calc()
+    lr.drop_values()
+    assert not hasattr(
+        lr, "_slope"
+    ), f"Failed to drop LinearRegression._slope. {lr._slope}"
+    assert not hasattr(
+        lr, "_intercept"
+    ), f"Failed to drop LinearRegression._intercept. {lr._intercept}"
+
+
+def test_lr_set_initialized(
+    lr: LinearRegression,
+    lr_df: pd.DataFrame,
+):
+    lr.fit(lr_df)
+    lr.calc()
+    lr.set_initialized(state=False)
+    assert (
+        not lr._initialized
+    ), f"Failed to set LinearRegression._initialized. {lr._initialized}"
+
+
 def test_lr2_to_series(
     lr2: LinearRegressionR2,
     lr_df: pd.DataFrame,
@@ -95,6 +120,29 @@ def test_lr2_to_dataframe(
     validate_dataframe: ValidateDataFrame,
 ):
     validate_dataframe(lr2, lr_df, ["lr2_14", "price_14", "slope_14", "intercept_14"])
+
+
+def test_lr2_drop_values(
+    lr2: LinearRegressionR2,
+    lr_df: pd.DataFrame,
+):
+    lr2.fit(lr_df)
+    lr2.calc()
+    lr2.drop_values()
+    assert not hasattr(lr2, "_lr2")
+    assert not hasattr(lr2._lr, "_slope")
+    assert not hasattr(lr2._lr, "_intercept")
+
+
+def test_lr2_set_initialized(
+    lr2: LinearRegressionR2,
+    lr_df: pd.DataFrame,
+):
+    lr2.fit(lr_df)
+    lr2.calc()
+    lr2.set_initialized(state=False)
+    assert not lr2._initialized
+    assert not lr2._lr._initialized
 
 
 def test_lrf_to_series(
@@ -112,3 +160,26 @@ def test_lrf_to_dataframe(
 ):
     lrf.set_period_config({"lrf": 0, "price": 14, "slope": 14, "intercept": 14})
     validate_dataframe(lrf, lr_df, ["lrf_0", "price_14", "slope_14", "intercept_14"])
+
+
+def test_lrf_drop_values(
+    lrf: LinearRegressionForecast,
+    lr_df: pd.DataFrame,
+):
+    lrf.fit(lr_df)
+    lrf.calc()
+    lrf.drop_values()
+    assert not hasattr(lrf, "_lrf")
+    assert not hasattr(lrf._lr, "_slope")
+    assert not hasattr(lrf._lr, "_intercept")
+
+
+def test_lrf_set_initialized(
+    lrf: LinearRegressionForecast,
+    lr_df: pd.DataFrame,
+):
+    lrf.fit(lr_df)
+    lrf.calc()
+    lrf.set_initialized(state=False)
+    assert not lrf._initialized
+    assert not lrf._lr._initialized

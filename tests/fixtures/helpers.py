@@ -42,7 +42,7 @@ ValidateSeries = Callable[[Indicator, pd.DataFrame, str], None]
 
 
 def handle_validate_series_generics(indicator: Indicator, series: pd.Series):
-    """Reassigns the series name of lower level series until a programmable solution is found."""
+    """Reassigns the series name of lower level indicator results until a programmable solution is found."""
     if type(indicator) is BollingerBands:
         if series.name == "sma_20":
             mod = f"ma_{indicator._period_config['ma']}"

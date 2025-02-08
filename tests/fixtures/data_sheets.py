@@ -15,7 +15,7 @@ def btc_df(csv_loader: CSVLoader):
 def obv_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-obv.xlsx",
+            file_name="btc-obv.xlsx",
             columns=["timestamp", "close", "volume", "up", "down", "obv"],
         ).copy()
     except FileNotFoundError as fnfe:
@@ -26,7 +26,7 @@ def obv_df(xls_loader: XLSXLoader):
 def sma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-sma.xlsx", columns=["timestamp", "close", "sma"]
+            file_name="btc-sma.xlsx", columns=["timestamp", "close", "sma"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -36,7 +36,7 @@ def sma_df(xls_loader: XLSXLoader):
 def ema_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-ema.xlsx", columns=["timestamp", "close", "ema"]
+            file_name="btc-ema.xlsx", columns=["timestamp", "close", "ema"]
         ).copy()
     except FileNotFoundError as fnfe:
         pytest.fail(str(fnfe))
@@ -46,7 +46,7 @@ def ema_df(xls_loader: XLSXLoader):
 def wma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-wma.xlsx",
+            file_name="btc-wma.xlsx",
             columns=[
                 "timestamp",
                 "close",
@@ -63,7 +63,7 @@ def wma_df(xls_loader: XLSXLoader):
 def hma_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-hma.xlsx",
+            file_name="btc-hma.xlsx",
             columns=[
                 "timestamp",
                 "close",
@@ -87,7 +87,7 @@ def hma_df(xls_loader: XLSXLoader):
 def rsi_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-rsi.xlsx",
+            file_name="btc-rsi.xlsx",
             columns=[
                 "timestamp",
                 "close",
@@ -111,7 +111,7 @@ def rsi_df(xls_loader: XLSXLoader):
 def bb_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-bb.xlsx",
+            file_name="btc-bb.xlsx",
             columns=[
                 "timestamp",
                 "close",
@@ -129,7 +129,7 @@ def bb_df(xls_loader: XLSXLoader):
 def bop_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-bop.xlsx",
+            file_name="btc-bop.xlsx",
             columns=[
                 "timestamp",
                 "open",
@@ -149,7 +149,7 @@ def bop_df(xls_loader: XLSXLoader):
 def donchian_channels_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-donchian.xlsx",
+            file_name="btc-donchian.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -168,7 +168,7 @@ def donchian_channels_df(xls_loader: XLSXLoader):
 def atr_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-atr.xlsx",
+            file_name="btc-atr.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -187,7 +187,7 @@ def atr_df(xls_loader: XLSXLoader):
 def adx_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-adx.xlsx",
+            file_name="btc-adx.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -215,7 +215,7 @@ def adx_df(xls_loader: XLSXLoader):
 def ichimoku_cloud_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-ichimoku_cloud.xlsx",
+            file_name="btc-ichimoku_cloud.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -240,7 +240,7 @@ def ichimoku_cloud_df(xls_loader: XLSXLoader):
 def lr_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-linear_regression.xlsx",
+            file_name="btc-linear_regression.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -262,7 +262,7 @@ def lr_df(xls_loader: XLSXLoader):
 def mfi_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-mfi.xlsx",
+            file_name="btc-mfi.xlsx",
             columns=[
                 "timestamp",
                 "high",
@@ -286,7 +286,7 @@ def mfi_df(xls_loader: XLSXLoader):
 def vwap_df(xls_loader: XLSXLoader):
     try:
         return xls_loader.read_resource(
-            "btc-vwap.xlsx",
+            file_name="btc-vwap.xlsx",
             columns=[
                 "timestamp",
                 "timestamp_mod",

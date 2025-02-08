@@ -16,7 +16,7 @@ LinearRegressionR2Periods = Union[Literal["lr2"], LinearRegressionPeriods]
 
 class LinearRegressionR2(Indicator):
 
-    _keys: List[LinearRegressionR2Keys] = ["lr2", "price", "slope", "intercept"]
+    _keys: List[LinearRegressionR2Keys] = ["lr2", "lr", "price", "slope", "intercept"]
     _period_default: Dict[LinearRegressionR2Periods, int] = {
         "price": 14,
         "lr2": 14,
@@ -31,8 +31,19 @@ class LinearRegressionR2(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         lr: Optional[LinearRegression] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
         if "price" not in self._period_config:
             self._period_config["price"] = self._period_config["lr2"]
         if "intercept" not in self._period_config:
@@ -52,11 +63,17 @@ class LinearRegressionR2(Indicator):
             else lr
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
         if not self._lr._initialized:
-            self._lr.calc()
+            self._lr.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         price = self._lr.to_numpy(get="price", dtype=np.float64)
         slopes = self._lr.to_numpy(get="slope", dtype=np.float64)
@@ -75,7 +92,7 @@ class LinearRegressionR2(Indicator):
             self._lr2 = array("d", lr2)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

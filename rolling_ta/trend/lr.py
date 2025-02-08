@@ -8,13 +8,13 @@ from rolling_ta.extras.numba import _typical_price, _linear_regression
 from rolling_ta.indicator import Indicator
 
 
-LinearRegressionKeys = Literal["price", "slope", "intercept"]
+LinearRegressionKeys = Literal["lr", "price", "slope", "intercept"]
 LinearRegressionPeriods = Literal["price"]
 
 
 class LinearRegression(Indicator):
 
-    _keys: List[LinearRegressionKeys] = ["price", "slope", "intercept"]
+    _keys: List[LinearRegressionKeys] = ["lr", "price", "slope", "intercept"]
     _period_config: Dict[LinearRegressionPeriods, int] = {"price": 14}
 
     def __init__(
@@ -25,6 +25,8 @@ class LinearRegression(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         """period_config is rather opinionated, might try to make it more flexible in the future.
 
@@ -37,15 +39,23 @@ class LinearRegression(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if "slope" not in self._period_config:
             self._period_config.update({"slope": self._period_config["price"]})
         if "intercept" not in self._period_config:
             self._period_config.update({"intercept": self._period_config["price"]})
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
         high = self._data["high"].to_numpy(dtype=np.float64)
         low = self._data["low"].to_numpy(dtype=np.float64)
         close = self._data["close"].to_numpy(dtype=np.float64)
@@ -73,7 +83,7 @@ class LinearRegression(Indicator):
             self._intercept = array("d", intercept)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

@@ -46,6 +46,8 @@ class MFI(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -54,11 +56,19 @@ class MFI(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
         close = self._data["close"].to_numpy(np.float64)
@@ -92,7 +102,7 @@ class MFI(Indicator):
         self._nmf_window = nmf[-self._period_config["mfi"] :]
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

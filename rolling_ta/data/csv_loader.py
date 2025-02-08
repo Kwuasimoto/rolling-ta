@@ -1,4 +1,7 @@
 import importlib.resources as pkg
+import os
+from pathlib import Path
+from typing import List
 
 import pandas as pd
 
@@ -11,12 +14,13 @@ class CSVLoader(DataLoader):
     def read_resource(
         self,
         file_name: str = "btc_ohlcv.csv",
+        file_path: List[str] = ["data"],
         columns=["timestamp", "open", "high", "low", "close", "volume"],
         index=["timestamp"],
     ):
         log.debug(f"CSVLoader: Loading from resources/{file_name}")
         resources = pkg.files("resources")
-        df = pd.read_csv(resources / file_name)
+        df = pd.read_csv(resources / Path(*file_path) / file_name)
         df.columns = columns
 
         if not set(index).issubset(columns):

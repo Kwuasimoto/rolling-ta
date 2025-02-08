@@ -39,6 +39,8 @@ class SMA(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -47,11 +49,19 @@ class SMA(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
         close = self._data["close"].to_numpy(dtype=np.float64)
         sma = np.zeros(close.size)
 
@@ -69,7 +79,7 @@ class SMA(Indicator):
             self._sma = array("f", sma)
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

@@ -36,6 +36,8 @@ class RSI(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         """
         Initialize the RSI indicator.
@@ -54,12 +56,20 @@ class RSI(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         self.alpha = 1 / period_config["rsi"]
         if init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: bool = True):
+        if self._initialized and not force:
+            return
+
         close = self._data["close"].to_numpy(np.float64)
         rsi = np.zeros(close.size, dtype=np.float64)
         gains = np.zeros(close.size, dtype=np.float64)
@@ -82,7 +92,7 @@ class RSI(Indicator):
         self._close_p = close_p
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

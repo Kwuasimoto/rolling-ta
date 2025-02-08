@@ -44,8 +44,19 @@ class AverageTrueRange(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         true_range: Optional[TrueRange] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
         if "tr" not in self._period_config:
             self._period_config.update({"tr": self._period_config["atr"]})
         self._tr = (
@@ -56,6 +67,8 @@ class AverageTrueRange(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if true_range is None
             else true_range
@@ -66,11 +79,17 @@ class AverageTrueRange(Indicator):
             else period_config["p_1"]
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
         if not self._init:
-            self._tr.calc()
+            self._tr.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         tr = self._tr.to_numpy(dtype=np.float64)
         atr = np.zeros(tr.size, dtype=np.float64)
@@ -88,7 +107,7 @@ class AverageTrueRange(Indicator):
             self._atr = array("d", self._atr)
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

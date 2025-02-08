@@ -62,3 +62,24 @@ def test_bb_to_dataframe(
     validate_dataframe: ValidateDataFrame,
 ):
     validate_dataframe(bollinger_bands, bb_df, ["ma_20", "upper_20", "lower_20"])
+
+
+def test_bb_drop_values(bollinger_bands: BollingerBands, bb_df: pd.DataFrame):
+    bollinger_bands.fit(data=bb_df)
+    bollinger_bands.calc()
+    bollinger_bands.drop_values()
+    assert not hasattr(bollinger_bands, "_upper")
+    assert not hasattr(bollinger_bands._ma, "_ema")
+    assert not hasattr(bollinger_bands, "_lower")
+
+
+def test_bb_set_initialized(bollinger_bands: BollingerBands, bb_df: pd.DataFrame):
+    bollinger_bands.fit(data=bb_df)
+    bollinger_bands.calc()
+    bollinger_bands.set_initialized(state=False)
+    assert (
+        not bollinger_bands._initialized
+    ), f"Failed to set BollingerBands._initialized. state={bollinger_bands.initialized()}"
+    assert (
+        not bollinger_bands._ma._initialized
+    ), f"Failed to set BollingerBands.EMA._initialized. state={bollinger_bands._ma.initialized()}"

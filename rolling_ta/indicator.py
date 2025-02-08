@@ -1,13 +1,14 @@
+from array import array
 from enum import Enum
 import numpy as np
 import pandas as pd
-from typing import Any, Iterable, List, Literal, Optional, Union, Dict
+from typing import Any, List, Literal, Optional, Union, Dict
 
-from rolling_ta import data
 from rolling_ta.logging import log
 
 
 class IndicatorID(Enum):
+    base = 0
     # Momentum (1xxx - 1999)
     bop = 1000
     rsi = 1001
@@ -42,13 +43,13 @@ class IndicatorID(Enum):
 
 class Indicator:
 
-    _id: IndicatorID
-    _data: pd.DataFrame
+    _id: IndicatorID = IndicatorID.base
+    _data: pd.DataFrame = None
     _keys: List[Literal["base"]] = ["base"]
     _period_config: Dict[Literal["base"], int] = {}
-    _memory: bool
+    _memory: bool = True
     _retention: Optional[int] = None
-    _init: bool
+    _init: bool = False
     _initialized: bool = False
     _count = 0
 
@@ -60,8 +61,12 @@ class Indicator:
         memory: bool,
         retention: Optional[int],
         init: bool,
+        force: bool,
+        initialization_state: bool,
     ) -> None:
-        self._data = data
+        if data is not None:
+            self._data = data.copy(deep=True)
+
         self._keys = keys
         self._period_config = period_config
         self._memory = memory
@@ -121,8 +126,11 @@ class Indicator:
             self.set_period_config(period_config)
         # Validate period input
         if self.validate_data(data):
-            log.debug(f"Fitting {len(data)} data points.", self)
-            self._data = data
+            log.debug(
+                f"Validated data for {self.__class__.__name__}, fitting shape={data.shape}",
+                self,
+            )
+            self._data = data.copy(deep=True)
         else:
             raise ValueError(f"A dataframe incompatible with {self} was supplied!")
 
@@ -135,24 +143,58 @@ class Indicator:
             return self._period_config[key]
         return self._period_config
 
-    def calc(self, __name__: str = "base") -> "Indicator":
-        raise NotImplementedError("Indicator not implemented yet! sorry!")
+    def calc(
+        self, force: bool = False, initialization_state: bool = False
+    ) -> "Indicator":
+        """Behavior:
 
-    def update(self, data: pd.Series, __name__: str = "base") -> "Indicator":
+        - Returns early if self._initialized is True
+        - Controls initialization state (recalculation guard) with 'initialization_state' parameter.
+        - Can be forced to recalculate with 'force' parameter.
+
+        """
         raise NotImplementedError(
-            "Indicator update function not implemented yet! sorry!"
+            f"{self.__class__.__name__} Indicator not implemented yet! sorry!"
+        )
+
+    def update(self, data: pd.Series) -> "Indicator":
+        raise NotImplementedError(
+            f"{self.__class__.__name__} Indicator update function not implemented yet! sorry!"
         )
 
     def apply_retention(self): ...
 
-    def set_initialized(self, state=True):
+    def _set_initialized(self, state=True):
+        """Shallow version of set_initialized"""
         self._initialized = state
+
+    def set_initialized(self, state=True):
+        """Propagates to nested indicators!"""
+        self._set_initialized(state)
+        for key in self._keys:
+            fkey = f"_{key}"
+            if hasattr(self, fkey):
+                attr = getattr(self, fkey)
+                if isinstance(attr, Indicator):
+                    attr.set_initialized(state)
 
     def initialized(self):
         return self._initialized
 
     def drop_data(self):
+        """Drops the data used to calculate the indicator."""
         self._data = None
+
+    def drop_values(self):
+        """Drops the calculated values in memory."""
+        for key in self._keys:
+            fkey = f"_{key}"
+            if hasattr(self, fkey):
+                attr = getattr(self, fkey)
+                if isinstance(attr, Indicator):
+                    attr.drop_values()
+                if isinstance(attr, array):
+                    delattr(self, fkey)
 
     def to_array(self, get: Literal["base"] = "base"):
         """Returns the raw information associated with this indicator object.

@@ -36,3 +36,19 @@ def test_mfi_to_dataframe(
     mfi: MFI, mfi_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(mfi, mfi_df, ["mfi_14"])
+
+
+def test_mfi_drop_values(mfi: MFI, mfi_df: pd.DataFrame):
+    mfi.fit(mfi_df)
+    mfi.calc()
+    mfi.drop_values()
+    assert not hasattr(mfi, "_mfi"), f"Failed to delete MFI._mfi attribute. {mfi._mfi}"
+
+
+def test_mfi_set_initialized(mfi: MFI, mfi_df: pd.DataFrame):
+    mfi.fit(mfi_df)
+    mfi.calc(initialization_state=True)
+    mfi.set_initialized(state=False)
+    assert (
+        not mfi._initialized
+    ), f"Failed to set MFI._initialized to false. {mfi._initialized}"

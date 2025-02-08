@@ -37,6 +37,8 @@ class StochasticRSI(Indicator):
         retention: Optional[None] = None,
         init: bool = False,
         rsi: Optional[RSI] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -45,6 +47,8 @@ class StochasticRSI(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
 
         if "rsi" not in self._period_config:
@@ -58,17 +62,28 @@ class StochasticRSI(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if rsi is None
             else rsi
         )
 
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
-        if not self._rsi._initialized:
-            self._rsi.calc()
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
+        if not self._rsi._initialized or force:
+            self._rsi.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         rsi = self._rsi.to_numpy()
         stoch_k = np.zeros(rsi.size, dtype=np.float64)
@@ -96,6 +111,9 @@ class StochasticRSI(Indicator):
 
             if stoch_d is not None:
                 self._stoch_d = array("d", stoch_d)
+
+        self.drop_data()
+        self._set_initialized(state=initialization_state)
 
         return self
 

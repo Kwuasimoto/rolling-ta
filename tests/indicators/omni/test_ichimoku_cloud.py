@@ -106,3 +106,34 @@ def test_ichimoku_cloud_to_dataframe(
         ichimoku_cloud_df,
         ["tenkan_9", "kijun_26", "senkou_b_52", "senkou_a_35"],
     )
+
+
+def test_ichimoku_cloud_drop_values(
+    ichimoku: IchimokuCloud, ichimoku_cloud_df: pd.DataFrame
+):
+    ichimoku.fit(ichimoku_cloud_df)
+    ichimoku.calc()
+    ichimoku.drop_values()
+    assert not hasattr(
+        ichimoku, "_tenkan"
+    ), f"Failed to delete IchimokuCloud._tenkan attribute. {ichimoku._tenkan}"
+    assert not hasattr(
+        ichimoku, "_kijun"
+    ), f"Failed to delete IchimokuCloud._kijun attribute. {ichimoku._kijun}"
+    assert not hasattr(
+        ichimoku, "_senkou_a"
+    ), f"Failed to delete IchimokuCloud._senkou_a attribute. {ichimoku._senkou_a}"
+    assert not hasattr(
+        ichimoku, "_senkou_b"
+    ), f"Failed to delete IchimokuCloud._senkou_b attribute. {ichimoku._senkou_b}"
+
+
+def test_ichimoku_cloud_set_initialized(
+    ichimoku: IchimokuCloud, ichimoku_cloud_df: pd.DataFrame
+):
+    ichimoku.fit(ichimoku_cloud_df)
+    ichimoku.calc(initialization_state=True)
+    ichimoku.set_initialized(state=False)
+    assert (
+        not ichimoku._initialized
+    ), f"Failed to set IchimokuCloud._initialized to false. {ichimoku._initialized}"

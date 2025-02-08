@@ -24,6 +24,8 @@ class WMA(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -32,13 +34,20 @@ class WMA(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
         close = self._data["close"].to_numpy(dtype=np.float64)
-
         wma = np.zeros(close.size, dtype=np.float64)
 
         _wma(
@@ -51,7 +60,7 @@ class WMA(Indicator):
             self._wma = array("d", wma)
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

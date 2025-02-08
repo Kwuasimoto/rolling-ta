@@ -1,12 +1,14 @@
 from array import array
 from typing import Dict, List, Literal, Optional, Union
 
+import iniconfig
 import numpy as np
 import pandas as pd
 
 from rolling_ta.extras.numba import _bollinger_bands
 from rolling_ta.trend.sma import SMA
 from rolling_ta.indicator import Indicator
+from rolling_ta.logging import log
 
 
 BollingerBandsKeys = Literal["bb", "ma"]
@@ -38,8 +40,19 @@ class BollingerBands(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         moving_average: Optional[Indicator] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
 
         # Use simple moving average if user does not supply a moving average.
         if "ma" not in self._period_config:
@@ -62,17 +75,26 @@ class BollingerBands(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if moving_average is None
             else moving_average
         )
 
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
-        if not self._ma._initialized:
-            self._ma.calc()
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        """Performs early return if _initialized is True"""
+        if self._initialized and not force:
+            return
+
+        if not self._ma._initialized or force:
+            self._ma.calc(force=force, initialization_state=initialization_state)
 
         close = self._data["close"].to_numpy(dtype=np.float64)
         ma = self._ma.to_numpy(dtype=np.float64)
@@ -93,7 +115,7 @@ class BollingerBands(Indicator):
             self._lower = array("d", lower)
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

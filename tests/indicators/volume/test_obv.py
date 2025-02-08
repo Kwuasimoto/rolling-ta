@@ -35,3 +35,19 @@ def test_obv_to_dataframe(
     obv: OBV, obv_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(obv, obv_df, ["obv_14"])
+
+
+def test_obv_drop_values(obv: OBV, obv_df: pd.DataFrame):
+    obv.fit(obv_df)
+    obv.calc()
+    obv.drop_values()
+    assert not hasattr(obv, "_obv"), f"Failed to delete OBV._obv attribute. {obv._obv}"
+
+
+def test_obv_set_initialized(obv: OBV, obv_df: pd.DataFrame):
+    obv.fit(obv_df)
+    obv.calc(initialization_state=True)
+    obv.set_initialized(state=False)
+    assert (
+        not obv._initialized
+    ), f"Failed to set OBV._initialized to false. {obv._initialized}"

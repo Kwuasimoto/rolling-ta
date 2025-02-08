@@ -17,6 +17,7 @@ LinearRegressionForecastPeriods = Union[Literal["lrf"], LinearRegressionPeriods]
 class LinearRegressionForecast(Indicator):
 
     _keys: List[LinearRegressionForecastKeys] = [
+        "lr",
         "lrf",
         "price",
         "slope",
@@ -36,8 +37,19 @@ class LinearRegressionForecast(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         lr: Optional[LinearRegression] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
         if "price" not in self._period_config:
             self._period_config["price"] = self._period_config["lrf"]
         if "intercept" not in self._period_config:
@@ -52,16 +64,27 @@ class LinearRegressionForecast(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if lr is None
             else lr
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
-        if not self._lr._initialized:
-            self._lr.calc()
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
+        if not self._lr._initialized or force:
+            self._lr.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         slopes = self._lr.to_numpy(get="slope", dtype=np.float64)
         intercepts = self._lr.to_numpy(get="intercept", dtype=np.float64)
@@ -75,7 +98,7 @@ class LinearRegressionForecast(Indicator):
             self._lrf = array("d", forecast)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

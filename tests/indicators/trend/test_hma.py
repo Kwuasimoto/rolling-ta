@@ -22,3 +22,19 @@ def test_hma_to_dataframe(
     hma: HMA, hma_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(hma, hma_df, ["hma_14", "wma_full_14", "wma_half_7"])
+
+
+def test_hma_drop_values(hma: HMA, hma_df: pd.DataFrame):
+    hma.fit(hma_df)
+    hma.calc()
+    hma.drop_values()
+    assert not hasattr(hma, "_hma"), f"Failed to delete HMA._hma attribute. {hma._hma}"
+
+
+def test_hma_set_initialized(hma: HMA, hma_df: pd.DataFrame):
+    hma.fit(hma_df)
+    hma.calc(initialization_state=True)
+    hma.set_initialized(state=False)
+    assert (
+        not hma._initialized
+    ), f"Failed to set HMA._initialized to false. {hma._initialized}"

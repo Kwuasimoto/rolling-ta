@@ -7,7 +7,6 @@ import numpy as np
 from rolling_ta.extras.numba import _donchian_channels
 from rolling_ta.indicator import Indicator
 
-
 DonchianChannelsKeys = Literal["highs", "center", "lows"]
 DonchianChannelsPeriods = Literal["center"]
 
@@ -25,6 +24,8 @@ class DonchianChannels(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         """The calculation of donchain is fairly opinionated, its possible to flex it but then we probably lose the simplicity of the indicator,"""
         super().__init__(
@@ -34,15 +35,23 @@ class DonchianChannels(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         if "lows" not in self._period_config:
             self._period_config.update({"lows": self._period_config["center"]})
         if "highs" not in self._period_config:
             self._period_config.update({"highs": self._period_config["center"]})
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: bool = False):
+        if self._initialized and not force:
+            return
+
         high = self._data["high"].to_numpy(dtype=np.float64)
         low = self._data["low"].to_numpy(dtype=np.float64)
 
@@ -65,7 +74,7 @@ class DonchianChannels(Indicator):
             self._center = array("d", centers)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

@@ -7,7 +7,6 @@ import pandas as pd
 from rolling_ta.extras.numba import _ema, _ema_update
 from rolling_ta.indicator import Indicator
 
-
 EMAKeys = Literal["ema"]
 EMAPeriods = Literal["ema", "weight"]
 
@@ -36,6 +35,8 @@ class EMA(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         weight: np.float64 = 2.0,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -44,6 +45,8 @@ class EMA(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
         self._weight = (
             weight / (period_config["ema"] + 1)
@@ -51,12 +54,18 @@ class EMA(Indicator):
             else period_config["weight"]
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: bool = False):
+        if self._initialized and not force:
+            return
+
         close = self._data["close"].to_numpy(dtype=np.float64)
-
         ema = np.zeros(close.size)
+
         ema, ema_latest = _ema(
             close,
             ema,
@@ -70,7 +79,7 @@ class EMA(Indicator):
             self._ema = array("d", ema)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

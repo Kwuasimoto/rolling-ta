@@ -38,3 +38,21 @@ def test_tr_to_dataframe(
     true_range: TrueRange, atr_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(true_range, atr_df, ["tr_14"])
+
+
+def test_tr_drop_values(true_range: TrueRange, atr_df: pd.DataFrame):
+    true_range.fit(atr_df)
+    true_range.calc()
+    true_range.drop_values()
+    assert not hasattr(
+        true_range, "_tr"
+    ), f"Failed to delete TrueRange._tr attribute. {true_range._tr}"
+
+
+def test_tr_set_initialized(true_range: TrueRange, atr_df: pd.DataFrame):
+    true_range.fit(atr_df)
+    true_range.calc(initialization_state=True)
+    true_range.set_initialized(state=False)
+    assert (
+        not true_range._initialized
+    ), f"Failed to set TrueRange._initialized to false. {true_range._initialized}"

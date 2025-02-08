@@ -31,3 +31,19 @@ def test_bop_to_dataframe(
     bop: BOP, bop_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(bop, bop_df, ["bop_14"])
+
+
+def test_bop_drop_values(bop: BOP, bop_df: pd.DataFrame):
+    bop.fit(bop_df, period_config={"bop": 14})
+    bop.calc()
+    bop.drop_values()
+    assert not hasattr(bop, "_bop"), f"Failed to delete BOP._bop attribute. {bop._bop}"
+
+
+def test_bop_set_initialized(bop: BOP, bop_df: pd.DataFrame):
+    bop.fit(bop_df, period_config={"bop": 14})
+    bop.calc(initialization_state=True)
+    bop.set_initialized(state=False)
+    assert (
+        not bop._initialized
+    ), f"Failed to set bop._initialized to false. {bop._initialized}"

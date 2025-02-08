@@ -36,3 +36,19 @@ def test_sma_dataframe(
     sma: SMA, sma_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(sma, sma_df, ["sma_14"])
+
+
+def test_sma_drop_values(sma: SMA, sma_df: pd.DataFrame):
+    sma.fit(sma_df)
+    sma.calc()
+    sma.drop_values()
+    assert not hasattr(sma, "_sma"), f"Failed to delete SMA._sma attribute. {sma._sma}"
+
+
+def test_sma_set_initialized(sma: SMA, sma_df: pd.DataFrame):
+    sma.fit(sma_df)
+    sma.calc(initialization_state=True)
+    sma.set_initialized(state=False)
+    assert (
+        not sma._initialized
+    ), f"Failed to set SMA._initialized to false. {sma._initialized}"

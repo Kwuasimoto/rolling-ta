@@ -24,3 +24,21 @@ def test_vwap_to_dataframe(
     vwap: VWAP, vwap_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(vwap, vwap_df, ["vwap_1440"])
+
+
+def test_vwap_drop_values(vwap: VWAP, vwap_df: pd.DataFrame):
+    vwap.fit(vwap_df)
+    vwap.calc()
+    vwap.drop_values()
+    assert not hasattr(
+        vwap, "_vwap"
+    ), f"Failed to delete VWAP._vwap attribute. {vwap._vwap}"
+
+
+def test_vwap_set_initialized(vwap: VWAP, vwap_df: pd.DataFrame):
+    vwap.fit(vwap_df)
+    vwap.calc(initialization_state=True)
+    vwap.set_initialized(state=False)
+    assert (
+        not vwap._initialized
+    ), f"Failed to set VWAP._initialized to false. {vwap._initialized}"

@@ -13,13 +13,21 @@ class MACD(Indicator):
         retention: Optional[int] = None,
         columns: Optional[list[str]] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(data, period_config, memory, retention, columns, init)
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
-        super().calc(__name__)
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        super().calc(
+            force=force,
+            initialization_state=initialization_state,
+        )
 
     def update(self, data: pd.Series):
-        return super().update(data, __name__)
+        return super().update(data)

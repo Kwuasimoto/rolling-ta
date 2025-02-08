@@ -24,12 +24,29 @@ class OBV(Indicator):
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
         close = self._data["close"].to_numpy(np.float64)
         volume = self._data["volume"].to_numpy(np.float64)
         obv = np.zeros(close.size, dtype=np.float64)
@@ -47,7 +64,7 @@ class OBV(Indicator):
         self._close_p = close_latest
 
         self.drop_data()
-        self.set_initialized()
+        self.set_initialized(state=initialization_state)
 
         return self
 

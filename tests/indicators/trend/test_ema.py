@@ -40,3 +40,19 @@ def test_ema_to_dataframe(
     ema: EMA, ema_df: pd.DataFrame, validate_dataframe: ValidateDataFrame
 ):
     validate_dataframe(ema, ema_df, ["ema_14"])
+
+
+def test_ema_drop_values(ema: EMA, ema_df: pd.DataFrame):
+    ema.fit(ema_df)
+    ema.calc()
+    ema.drop_values()
+    assert not hasattr(ema, "_ema"), f"Failed to delete EMA._ema attribute. {ema._ema}"
+
+
+def test_ema_set_initialized(ema: EMA, ema_df: pd.DataFrame):
+    ema.fit(ema_df)
+    ema.calc(initialization_state=True)
+    ema.set_initialized(state=False)
+    assert (
+        not ema._initialized
+    ), f"Failed to set EMA._initialized to false. {ema._initialized}"

@@ -17,7 +17,7 @@ ADXPeriods = ADXKeys
 
 class ADX(Indicator):
 
-    _keys: ADXKeys = ["adx", "dx", "pdmi", "ndmi", "tr"]
+    _keys: ADXKeys = ["adx", "dx", "dmi", "pdmi", "ndmi", "tr"]
     _period_config: Dict[ADXPeriods, int] = {
         "adx": 14,
         "dx": 14,
@@ -29,13 +29,15 @@ class ADX(Indicator):
     def __init__(
         self,
         data: Optional[pd.DataFrame] = None,
-        keys: List[ADXKeys] = ["adx", "dx", "pdmi", "ndmi", "tr"],
+        keys: List[ADXKeys] = ["adx", "dx", "dmi", "pdmi", "ndmi", "tr"],
         period_config: Dict[ADXPeriods, int] = _period_config,
         memory: bool = True,
         retention: Optional[int] = None,
         init: bool = False,
         dmi: Optional[DMI] = None,
         tr: Optional[TrueRange] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
         super().__init__(
             data,
@@ -44,6 +46,8 @@ class ADX(Indicator):
             memory=memory,
             retention=retention,
             init=init,
+            force=force,
+            initialization_state=initialization_state,
         )
 
         if "dx" not in self._period_config:
@@ -54,14 +58,6 @@ class ADX(Indicator):
 
         if "ndmi" not in self._period_config:
             self._period_config.update({"ndmi": self._period_config["dx"]})
-
-        if "dmi" not in self._period_config:
-            self._period_config.update(
-                {
-                    "dmi": (self._period_config["pdmi"] + self._period_config["ndmi"])
-                    // 2
-                }
-            )
 
         if "tr" not in self._period_config:
             self._period_config.update({"tr": self._period_config["dx"]})
@@ -79,16 +75,27 @@ class ADX(Indicator):
                 retention=retention,
                 init=init,
                 tr=tr,
+                force=force,
+                initialization_state=initialization_state,
             )
             if dmi is None
             else dmi
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
-        if not self._dmi._initialized:
-            self._dmi.calc()
+    def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
+        if self._initialized and not force:
+            return
+
+        if not self._dmi._initialized or force:
+            self._dmi.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         pdmi = self.to_numpy(get="pdmi", dtype=np.float64)
         ndmi = self.to_numpy(get="ndmi", dtype=np.float64)
@@ -104,7 +111,9 @@ class ADX(Indicator):
             dx,
             np.zeros(dx.size, dtype=np.float64),
             self._period_config["adx"],
-            self._period_config["dmi"],
+            self._period_config.get(
+                "dmi", (self._period_config["pdmi"] + self._period_config["ndmi"]) // 2
+            ),
         )
 
         if self._memory:
@@ -115,7 +124,7 @@ class ADX(Indicator):
         self._adx_p = adx_p
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

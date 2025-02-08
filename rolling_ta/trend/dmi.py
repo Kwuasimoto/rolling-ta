@@ -37,8 +37,19 @@ class DMI(Indicator):
         retention: Optional[int] = None,
         init: bool = False,
         tr: Optional[TrueRange] = None,
+        force: bool = False,
+        initialization_state: bool = False,
     ) -> None:
-        super().__init__(data, keys, period_config, memory, retention, init)
+        super().__init__(
+            data=data,
+            keys=keys,
+            period_config=period_config,
+            memory=memory,
+            retention=retention,
+            init=init,
+            force=force,
+            initialization_state=initialization_state,
+        )
         if "tr" not in self._period_config:
             self._period_config.update(
                 {"tr": (self._period_config["pdmi"] + self._period_config["ndmi"]) // 2}
@@ -51,16 +62,24 @@ class DMI(Indicator):
                 memory=memory,
                 retention=retention,
                 init=init,
+                force=force,
+                initialization_state=initialization_state,
             )
             if tr is None
             else tr
         )
         if self._init:
-            self.calc()
+            self.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
-    def calc(self):
+    def calc(self, force: bool = False, initialization_state: bool = False):
         if not self._init:
-            self._tr.calc()
+            self._tr.calc(
+                force=force,
+                initialization_state=initialization_state,
+            )
 
         high = self._data["high"].to_numpy(np.float64)
         low = self._data["low"].to_numpy(np.float64)
@@ -104,7 +123,7 @@ class DMI(Indicator):
             self._ndmi = array("d", self._ndmi)
 
         self.drop_data()
-        self.set_initialized()
+        self._set_initialized(state=initialization_state)
 
         return self
 

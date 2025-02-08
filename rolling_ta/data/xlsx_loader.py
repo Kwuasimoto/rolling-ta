@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+from typing import List
 import pandas as pd
 from rolling_ta.data import DataLoader
 
@@ -11,13 +14,14 @@ class XLSXLoader(DataLoader):
     def read_resource(
         self,
         file_name: str = "btc_200.xlsx",
+        file_path: List[str] = ["data"],
         columns=["timestamp", "open", "high", "low", "close", "volume"],
         index=["timestamp"],
     ):
         log.debug(f"XLSXLoader: Loading from resources/{file_name}")
         resources = pkg.files("resources")
 
-        df = pd.read_excel(resources / file_name, header=None)
+        df = pd.read_excel(resources / Path(*file_path) / file_name, header=None)
         df.columns = columns
 
         if not set(index).issubset(columns):
@@ -26,7 +30,6 @@ class XLSXLoader(DataLoader):
             )
 
         df.set_index(index, inplace=True)
-
         return df
 
     def read_file(self, path: str):
