@@ -14,6 +14,20 @@ def test_vwap(vwap: VWAP, vwap_df: pd.DataFrame, evaluate: Eval):
     )
 
 
+def test_vwap_update(vwap: VWAP, vwap_df: pd.DataFrame, evaluate: Eval):
+    vwap.fit(data=vwap_df[:1440])
+    vwap.calc()
+
+    for _, ohlcv in vwap_df.iloc[1440:].iterrows():
+        vwap.update(ohlcv)
+
+    evaluate(
+        vwap_df["vwap"].to_numpy(dtype=np.float64),
+        vwap.to_numpy(dtype=np.float64),
+        name="VWAP",
+    )
+
+
 def test_vwap_to_series(
     vwap: VWAP, vwap_df: pd.DataFrame, validate_series: ValidateSeries
 ):

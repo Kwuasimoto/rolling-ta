@@ -15,33 +15,63 @@ from tests.fixtures.helpers import (
 )
 
 
-def test_intercepts(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
+def test_lr(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
     log.debug(f"{lr.get_config()}")
     lr.fit(data=lr_df)
-    evaluate(
-        lr_df["intercept"].to_numpy(dtype=np.float64),
-        lr.calc().to_numpy(get="intercept"),
-        "intercepts",
-    )
-
-
-def test_slopes(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
-    log.debug(f"{lr.get_config()}")
-    lr.fit(data=lr_df)
+    lr.calc()
     evaluate(
         lr_df["slope"].to_numpy(dtype=np.float64),
-        lr.calc().to_numpy(get="slope"),
-        "slopes",
+        lr.to_numpy(get="slope"),
+        "LR SLOPES",
+    )
+    evaluate(
+        lr_df["intercept"].to_numpy(dtype=np.float64),
+        lr.to_numpy(get="intercept"),
+        "LR INTERCEPTS",
     )
 
 
-def test_r2(lr2: LinearRegressionR2, lr_df: pd.DataFrame, evaluate: Eval):
+def test_lr_update(lr: LinearRegression, lr_df: pd.DataFrame, evaluate: Eval):
+    lr.fit(data=lr_df[:50])
+    lr.calc()
+
+    for _, ohlcv in lr_df.iloc[50:].iterrows():
+        lr.update(ohlcv)
+
+    evaluate(
+        lr_df["intercept"].to_numpy(dtype=np.float64),
+        lr.to_numpy(get="intercept"),
+        "LR INTERCEPTS UPDATE",
+    )
+
+    evaluate(
+        lr_df["slope"].to_numpy(dtype=np.float64),
+        lr.to_numpy(get="slope"),
+        "LR SLOPES UPDATE",
+    )
+
+
+def test_lr2(lr2: LinearRegressionR2, lr_df: pd.DataFrame, evaluate: Eval):
     log.debug(f"{lr2.get_config()}")
     lr2.fit(data=lr_df)
     evaluate(
         lr_df["lr2"].to_numpy(dtype=np.float64),
         lr2.calc().to_numpy(get="lr2"),
-        "lr2",
+        "LR2",
+    )
+
+
+def test_lr2_update(lr2: LinearRegressionR2, lr_df: pd.DataFrame, evaluate: Eval):
+    lr2.fit(data=lr_df[:50])
+    lr2.calc()
+
+    for _, ohlcv in lr_df.iloc[50:].iterrows():
+        lr2.update(ohlcv)
+
+    evaluate(
+        lr_df["lr2"].to_numpy(dtype=np.float64),
+        lr2.to_numpy(get="lr2"),
+        "LR2 Update",
     )
 
 
@@ -51,7 +81,7 @@ def test_forecast(lrf: LinearRegressionForecast, lr_df: pd.DataFrame, evaluate: 
     evaluate(
         lr_df["forecast"].to_numpy(dtype=np.float64),
         lrf.calc().to_numpy(get="lrf"),
-        "forecast",
+        "LR FORECAST",
     )
 
 
@@ -80,30 +110,30 @@ def test_lr_to_dataframe(
 
 
 def test_lr_drop_values(
-    lr: LinearRegression,
+    lr2: LinearRegression,
     lr_df: pd.DataFrame,
 ):
-    lr.fit(lr_df)
-    lr.calc()
-    lr.drop_values()
+    lr2.fit(lr_df)
+    lr2.calc()
+    lr2.drop_values()
     assert not hasattr(
-        lr, "_slope"
-    ), f"Failed to drop LinearRegression._slope. {lr._slope}"
+        lr2, "_slope"
+    ), f"Failed to drop LinearRegression._slope. {lr2._slope}"
     assert not hasattr(
-        lr, "_intercept"
-    ), f"Failed to drop LinearRegression._intercept. {lr._intercept}"
+        lr2, "_intercept"
+    ), f"Failed to drop LinearRegression._intercept. {lr2._intercept}"
 
 
 def test_lr_set_initialized(
-    lr: LinearRegression,
+    lr2: LinearRegression,
     lr_df: pd.DataFrame,
 ):
-    lr.fit(lr_df)
-    lr.calc()
-    lr.set_initialized(state=False)
+    lr2.fit(lr_df)
+    lr2.calc()
+    lr2.set_initialized(state=False)
     assert (
-        not lr._initialized
-    ), f"Failed to set LinearRegression._initialized. {lr._initialized}"
+        not lr2._initialized
+    ), f"Failed to set LinearRegression._initialized. {lr2._initialized}"
 
 
 def test_lr2_to_series(

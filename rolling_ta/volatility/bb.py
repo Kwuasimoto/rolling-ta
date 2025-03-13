@@ -1,11 +1,10 @@
 from array import array
 from typing import Dict, List, Literal, Optional, Union
 
-import iniconfig
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _bollinger_bands
+from rolling_ta.extras.numba import _bollinger_bands, _bollinger_bands_update
 from rolling_ta.trend.sma import SMA
 from rolling_ta.indicator import Indicator
 from rolling_ta.logging import log
@@ -110,6 +109,8 @@ class BollingerBands(Indicator):
             weight=self._period_config["weight"],
         )
 
+        self._price_latest = close[-self._period_config["bb"] :]
+
         if self._memory:
             self._upper = array("d", upper)
             self._lower = array("d", lower)
@@ -118,6 +119,21 @@ class BollingerBands(Indicator):
         self.set_initialized(state=initialization_state)
 
         return self
+
+    def update(self, data: pd.Series) -> Indicator:
+        self._ma.update(data)
+
+        upper, lower = _bollinger_bands_update(
+            price=data["close"],
+            price_latest=self._price_latest,
+            ma=self._ma.get(-1),
+            period=self._period_config["bb"],
+            weight=self._period_config["weight"],
+        )
+
+        if self._memory:
+            self._upper.append(upper)
+            self._lower.append(lower)
 
     def fit(
         self,

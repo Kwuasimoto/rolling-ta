@@ -45,6 +45,24 @@ def test_donchian_channels_center(
     )
 
 
+def test_donchian_channels_update(
+    donchian_channels: DonchianChannels,
+    donchian_channels_df: pd.DataFrame,
+    evaluate: Eval,
+):
+    donchian_channels.fit(data=donchian_channels_df[:50])
+    donchian_channels.calc()
+
+    for _, ohlcv in donchian_channels_df.iloc[50:].iterrows():
+        donchian_channels.update(ohlcv)
+
+    evaluate(
+        donchian_channels_df["centers"].to_numpy(dtype=np.float64),
+        donchian_channels.to_numpy("center"),
+        "donchian_centers",
+    )
+
+
 def test_donchian_channels_highs_to_series(
     donchian_channels: DonchianChannels,
     donchian_channels_df: pd.DataFrame,

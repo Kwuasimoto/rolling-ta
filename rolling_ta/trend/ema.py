@@ -59,6 +59,9 @@ class EMA(Indicator):
                 initialization_state=initialization_state,
             )
 
+    def get(self, index: int, key: EMAKeys = "ema"):
+        return super().get(index, key)
+
     def calc(self, force: bool = False, initialization_state: bool = False):
         if self._initialized and not force:
             return

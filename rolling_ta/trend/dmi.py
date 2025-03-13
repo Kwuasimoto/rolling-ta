@@ -132,11 +132,13 @@ class DMI(Indicator):
         low = data["low"]
 
         # Update sub indicators and get necessary values
-        tr = self._tr.update(data)
+        self._tr.update(data)
 
         pdm, ndm = _dm_update(high, low, self._high_p, self._low_p)
 
-        self._s_tr_p = _dm_smoothing_update(tr, self._s_tr_p, self._period_config["tr"])
+        self._s_tr_p = _dm_smoothing_update(
+            self._tr.get(-1), self._s_tr_p, self._period_config["tr"]
+        )
         self._s_pdm_p = _dm_smoothing_update(
             pdm, self._s_pdm_p, self._period_config["pdmi"]
         )

@@ -32,6 +32,34 @@ def test_bb_lower(bollinger_bands: BollingerBands, bb_df: pd.DataFrame, evaluate
     )
 
 
+def test_bb_update(
+    bollinger_bands: BollingerBands, bb_df: pd.DataFrame, evaluate: Eval
+):
+    bollinger_bands.fit(data=bb_df[:50])
+    bollinger_bands.calc()
+
+    for _, series in bb_df.iloc[50:].iterrows():
+        bollinger_bands.update(series)
+
+    evaluate(
+        bb_df["sma"].to_numpy(dtype=np.float64).round(6),
+        bollinger_bands.to_numpy(dtype=np.float64).round(6),
+        name="BB_CENTER_UPDATE",
+    )
+
+    evaluate(
+        bb_df["lower"].to_numpy(dtype=np.float64).round(6),
+        bollinger_bands.to_numpy(get="lower", dtype=np.float64).round(6),
+        name="BB_LOWER_UPDATE",
+    )
+
+    evaluate(
+        bb_df["upper"].to_numpy(dtype=np.float64).round(6),
+        bollinger_bands.to_numpy(get="upper", dtype=np.float64).round(6),
+        name="BB_UPPER_UPDATE",
+    )
+
+
 def test_bb_ma_to_series(
     bollinger_bands: BollingerBands,
     bb_df: pd.DataFrame,

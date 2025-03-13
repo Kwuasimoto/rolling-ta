@@ -3,7 +3,7 @@ from typing import Dict, List, Literal, Optional
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _wma
+from rolling_ta.extras.numba import _wma, _wma_update
 from rolling_ta.indicator import Indicator
 
 
@@ -56,6 +56,8 @@ class WMA(Indicator):
             period=self._period_config["wma"],
         )
 
+        self._price_latest = close[-self._period_config["wma"] :]
+
         if self._memory:
             self._wma = array("d", wma)
 
@@ -63,6 +65,23 @@ class WMA(Indicator):
         self.set_initialized(state=initialization_state)
 
         return self
+
+    def update(self, data: pd.Series) -> Indicator:
+        close = data["close"]
+
+        wma = _wma_update(
+            price=close,
+            price_latest=self._price_latest,
+            period=self._period_config["wma"],
+        )
+
+        if self._memory:
+            self._wma.append(wma)
+
+        return self
+
+    def get(self, index: int, key: WMAKeys = "wma"):
+        return super().get(index, key)
 
     def fit(
         self,

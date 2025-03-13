@@ -4,7 +4,11 @@ from typing import Dict, List, Literal, Optional
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _typical_price, _linear_regression
+from rolling_ta.extras.numba import (
+    _typical_price,
+    _linear_regression,
+    _linear_regression_update,
+)
 from rolling_ta.indicator import Indicator
 
 
@@ -61,6 +65,14 @@ class LinearRegression(Indicator):
         close = self._data["close"].to_numpy(dtype=np.float64)
 
         price = np.empty(close.size, dtype=np.float64)
+
+        self.x = 0.0
+        self.xx = 0.0
+
+        for i in range(self._period_config["price"]):
+            self.x += i
+            self.xx += i * i
+
         _typical_price(
             high=high,
             low=low,
@@ -75,7 +87,11 @@ class LinearRegression(Indicator):
             slope_container=slope,
             intercept_container=intercept,
             period=self._period_config["price"],
+            x=self.x,
+            xx=self.xx,
         )
+
+        self._y_latest = price[-self._period_config["price"] :]
 
         if self._memory:
             self._price = array("d", price)
@@ -88,7 +104,28 @@ class LinearRegression(Indicator):
         return self
 
     def update(self, data: pd.Series):
-        super().update(data, __name__)
+        high = data["high"]
+        low = data["low"]
+        close = data["close"]
+        price = (high + low + close) / 3
+
+        slope, intercept = _linear_regression_update(
+            price=price,
+            y_latest=self._y_latest,
+            period=self._period_config["price"],
+            x=self.x,
+            xx=self.xx,
+        )
+
+        if self._memory:
+            self._price = price
+            self._slope.append(slope)
+            self._intercept.append(intercept)
+
+        return self
+
+    def get(self, index: int, key: LinearRegressionKeys = "price"):
+        return super().get(index, key)
 
     def fit(
         self,

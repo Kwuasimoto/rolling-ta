@@ -14,6 +14,20 @@ def test_hma(hma: HMA, hma_df: pd.DataFrame, evaluate: Eval):
     )
 
 
+def test_hma_update(hma: HMA, hma_df: pd.DataFrame, evaluate: Eval):
+    hma.fit(data=hma_df[:50])
+    hma.calc()
+
+    for _, ohlcv in hma_df.iloc[50:].iterrows():
+        hma.update(ohlcv)
+
+    evaluate(
+        hma_df["hma"].to_numpy(dtype=np.float64).round(6),
+        hma.to_numpy().round(6),
+        "HMA",
+    )
+
+
 def test_hma_to_series(hma: HMA, hma_df: pd.DataFrame, validate_series: ValidateSeries):
     validate_series(hma, hma_df, "hma")
 

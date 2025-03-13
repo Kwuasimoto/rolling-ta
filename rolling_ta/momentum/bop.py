@@ -4,7 +4,7 @@ from typing import Dict, List, Literal, Optional
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _bop
+from rolling_ta.extras.numba import _bop, _bop_update
 from rolling_ta.indicator import Indicator
 
 BalanceOfPowerPeriods = Literal["bop"]
@@ -54,6 +54,7 @@ class BOP(Indicator):
         close = self._data["close"].to_numpy(dtype=np.float64)
 
         bop = np.zeros(close.size, dtype=np.float64)
+        self._latest_range = np.zeros(self._period_config["bop"] or 1, dtype=np.float64)
 
         _bop(
             open=open,
@@ -61,6 +62,7 @@ class BOP(Indicator):
             low=low,
             close=close,
             bop_container=bop,
+            latest_range_container=self._latest_range,
             smoothing=self._period_config["bop"],
         )
 
@@ -72,11 +74,29 @@ class BOP(Indicator):
 
         return self
 
+    def update(self, data: pd.Series) -> Indicator:
+        self._bop_latest = _bop_update(
+            open=data["open"],
+            high=data["high"],
+            low=data["low"],
+            close=data["close"],
+            latest_range=self._latest_range,
+            smoothing=self._period_config["bop"],
+        )
+
+        if self._memory:
+            self._bop.append(self._bop_latest)
+
+        return self
+
     def fit(
         self,
         data,
-        period_config: Dict[BalanceOfPowerPeriods, int] = _period_config,
+        period_config: Optional[Dict[BalanceOfPowerPeriods, int]] = None,
     ):
+        if period_config is None:
+            super().fit(data, self._period_config)
+            return
         super().fit(data, period_config)
 
     def to_array(self, get: BalanceOfPowerKeys = "bop"):

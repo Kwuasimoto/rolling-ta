@@ -1,10 +1,11 @@
 from array import array
+from math import floor
 from typing import Dict, List, Literal, Optional
 
 import pandas as pd
 import numpy as np
 
-from rolling_ta.extras.numba import _hma
+from rolling_ta.extras.numba import _hma, _hma_update
 from rolling_ta.trend.wma import WMA
 from rolling_ta.indicator import Indicator
 
@@ -96,25 +97,43 @@ class HMA(Indicator):
                 initialization_state=initialization_state,
             )
 
-        close = self._data["close"].to_numpy(dtype=np.float64)
         wma_full = self._wma_full.to_numpy()
         wma_half = self._wma_half.to_numpy()
-        hma_internim = np.zeros(close.size, dtype=np.float64)
-        hma = np.zeros(close.size, dtype=np.float64)
+        hma_internim = np.zeros(len(self._data["close"]), dtype=np.float64)
+        hma = np.zeros(len(self._data["close"]), dtype=np.float64)
 
-        _hma(
+        self._period_sqrt, self._weight_sum = _hma(
             wma_full=wma_full,
             wma_half=wma_half,
             hma_internim=hma_internim,
             hma_container=hma,
-            hma_period=self._period_config["hma"],
+            period=self._period_config["hma"],
         )
+
+        self._internim_latest = hma_internim[-self._period_config["hma"] :]
 
         if self._memory:
             self._hma = array("d", hma)
 
         self.drop_data()
         self._set_initialized(state=initialization_state)
+
+        return self
+
+    def update(self, data: pd.Series) -> Indicator:
+        self._wma_full.update(data)
+        self._wma_half.update(data)
+
+        hma = _hma_update(
+            wma_full_latest=self._wma_full.get(-1),
+            wma_half_latest=self._wma_half.get(-1),
+            internim_latest=self._internim_latest,
+            period_sqrt=self._period_sqrt,
+            weight_sum=self._weight_sum,
+        )
+
+        if self._memory:
+            self._hma.append(hma)
 
         return self
 

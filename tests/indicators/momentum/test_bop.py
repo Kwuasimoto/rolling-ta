@@ -14,8 +14,22 @@ def test_bop(bop: BOP, bop_df: pd.DataFrame, evaluate: Eval):
     )
 
 
+def test_bop_update(bop: BOP, bop_df: pd.DataFrame, evaluate: Eval):
+    bop.fit(data=bop_df[:50], period_config={"bop": 14})
+    bop.calc()
+
+    for _, series in bop_df.iloc[50:].iterrows():
+        bop.update(series)
+
+    evaluate(
+        bop_df["bop_14"].to_numpy(dtype=np.float64),
+        bop.to_numpy(dtype=np.float64),
+        "BOP_UPDATE",
+    )
+
+
 def test_bop_smoothed(bop: BOP, bop_df: pd.DataFrame, evaluate: Eval):
-    bop.fit(bop_df, period_config={"bop": 14})
+    bop.fit(bop_df)
     evaluate(
         bop_df["bop_14"].to_numpy(dtype=np.float64),
         bop.calc().to_numpy(dtype=np.float64),

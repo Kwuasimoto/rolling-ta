@@ -4,7 +4,7 @@ from typing import Dict, List, Literal, Optional, Union
 import numpy as np
 import pandas as pd
 
-from rolling_ta.extras.numba import _linear_regression_r2
+from rolling_ta.extras.numba import _linear_regression_r2, _linear_regression_r2_update
 from rolling_ta.indicator import Indicator
 
 from .lr import LinearRegression, LinearRegressionKeys, LinearRegressionPeriods
@@ -97,7 +97,19 @@ class LinearRegressionR2(Indicator):
         return self
 
     def update(self, data: pd.Series):
-        super().update(data, __name__)
+        self._lr.update(data)
+
+        r2 = _linear_regression_r2_update(
+            y_latest=self._lr._y_latest,
+            slope_latest=self._lr.get(-1, "slope"),
+            intercept_latest=self._lr.get(-1, "intercept"),
+            period=self._period_config["lr2"],
+        )
+
+        if self._memory:
+            self._lr2.append(r2)
+
+        return self
 
     def fit(
         self,

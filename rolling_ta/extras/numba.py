@@ -1,5 +1,4 @@
 from math import floor
-from re import M
 import numba as nb
 import numpy as np
 
@@ -207,6 +206,25 @@ def _wma(close: np.ndarray[f8], wma_container: np.ndarray[f8], period: i4 = 14):
 
 @nb.njit(
     cache=NUMBA_DISK_CACHING,
+    # parallel=NUMBA_PARALLEL,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _wma_update(price: f8, price_latest: np.ndarray[f8], period: i4 = 14):
+    weight_sum: i4 = (period * (period + 1)) // 2
+
+    price_latest[:-1] = price_latest[1:]
+    price_latest[-1] = price
+
+    current_weighted_sum: f8 = 0.0
+    for j in range(period):
+        current_weighted_sum += price_latest[j] * (j + 1)
+
+    return current_weighted_sum / weight_sum
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
     parallel=NUMBA_PARALLEL,
     fastmath=NUMBA_FASTMATH,
     nogil=NUMBA_NOGIL,
@@ -216,25 +234,52 @@ def _hma(
     wma_half: np.ndarray[f8],
     hma_internim: np.ndarray[f8],
     hma_container: np.ndarray[f8],
-    hma_period: i4 = 14,
+    period: i4 = 14,
 ):
-    for i in nb.prange(hma_period - 1, hma_container.size):
+    for i in nb.prange(period - 1, hma_container.size):
         hma_internim[i] = (wma_half[i] * 2) - wma_full[i]
 
-    period_sqrt = floor(hma_period**0.5)
+    period_sqrt = floor(period**0.5)
     p_1 = period_sqrt - 1
     weight_sum: i4 = 0
 
     for i in nb.prange(1, period_sqrt + 1):
         weight_sum += i
 
-    for i in nb.prange(hma_period - 1, hma_container.size - period_sqrt + 1):
+    for i in nb.prange(period - 1, hma_container.size - period_sqrt + 1):
         current_weighted_sum: f8 = 0.0
 
         for j in nb.prange(0, period_sqrt):
-            current_weighted_sum += hma_internim[i + j] * (j + 1)
+            weight = j + 1
+            current_weighted_sum += hma_internim[i + j] * weight
 
         hma_container[i + p_1] = current_weighted_sum / weight_sum
+
+    return period_sqrt, weight_sum
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    # parallel=NUMBA_PARALLEL,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _hma_update(
+    wma_full_latest: f8,
+    wma_half_latest: f8,
+    internim_latest: np.ndarray[f8],
+    period_sqrt: i4 = 14,
+    weight_sum: i4 = 6,
+):
+    internim_latest[:-1] = internim_latest[1:]
+    internim_latest[-1] = (wma_half_latest * 2) - wma_full_latest
+
+    current_weighted_sum: f8 = 0.0
+    for j in range(0, period_sqrt):
+        weight = j + 1
+        current_weighted_sum += internim_latest[j - period_sqrt] * weight
+
+    return current_weighted_sum / weight_sum
 
 
 @nb.njit(
@@ -519,11 +564,9 @@ def _vwap(
     price: np.ndarray[f8],
     volume: np.ndarray[f8],
     vwap_container: np.ndarray[f8],
-    length: i4 = 1440,
+    t_gate: i4 = 86400,
 ):
     # determine where to reset the vwap (defaults to start of day (86400))
-    t_gate = length * 60
-
     raw_accum: f8 = 0.0
     vol_accum: f8 = 0.0
 
@@ -536,6 +579,65 @@ def _vwap(
         vol_accum += volume[i]
 
         vwap_container[i] = raw_accum / vol_accum
+
+    return raw_accum, vol_accum
+
+
+@nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
+def _vwap_update(
+    timestamp: i8,
+    high: f8,
+    low: f8,
+    close: f8,
+    volume: f8,
+    raw_accum_latest: f8,
+    vol_accum_latest: f8,
+    t_gate: i4 = 86400,
+):
+    if timestamp % t_gate == 0:
+        raw_accum_latest = 0
+        vol_accum_latest = 0
+
+    raw_accum_latest += _typical_price_single(high, low, close) * volume
+    vol_accum_latest += volume
+
+    return raw_accum_latest / vol_accum_latest, raw_accum_latest, vol_accum_latest
+
+
+@nb.njit(
+    # parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _donchian_channels_update(
+    high: f8,
+    low: f8,
+    latest_high: np.ndarray[f8],
+    latest_low: np.ndarray[f8],
+    period: i4 = 14,
+):
+    if period <= 0:
+        latest_high[0] = high
+        latest_low[0] = low
+        return (high + low) * 0.5
+    else:
+        latest_high[:-1] = latest_high[1:]
+        latest_low[:-1] = latest_low[1:]
+
+        latest_high[-1] = high
+        latest_low[-1] = low
+
+        h: f8 = high
+        l: f8 = low
+
+        for i in nb.prange(period):
+            if latest_high[i] > h:
+                h = latest_high[i]
+            if latest_low[i] < l:
+                l = latest_low[i]
+
+        return (h + l) * 0.5
 
 
 @nb.njit(
@@ -552,6 +654,12 @@ def _donchian_channels(
     centers: np.ndarray[f8],
     period: i4 = 14,
 ):
+    if period <= 0:
+        highs[0] = high[-1]
+        lows[0] = low[-1]
+        centers[0] = (high[-1] + low[-1]) * 0.5
+        return
+
     for i in nb.prange(period - 1, high.size):
         h: f8 = high[i]
         l: f8 = low[i]
@@ -565,6 +673,33 @@ def _donchian_channels(
         highs[i] = h
         lows[i] = l
         centers[i] = (h + l) * 0.5
+
+
+def _bollinger_bands_update(
+    price: f8,
+    price_latest: np.ndarray[f8],
+    ma: f8,
+    period: i4 = 20,
+    weight: f4 = 2.0,
+):
+    price_latest[:-1] = price_latest[1:]
+    price_latest[-1] = price
+
+    price_sum: f8 = 0.0
+    for i in nb.prange(period):
+        price_sum += price_latest[i]
+    mean: f8 = price_sum / period
+
+    variance: f8 = 0.0
+    for i in nb.prange(period):
+        diff = price_latest[i] - mean
+        variance += diff * diff
+    variance /= period
+
+    std_dev = variance**0.5
+    weighted_std_dev = std_dev * weight
+
+    return ma + weighted_std_dev, ma - weighted_std_dev
 
 
 @nb.njit(
@@ -601,6 +736,38 @@ def _bollinger_bands(
 
 
 @nb.njit(
+    # parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _bop_update(
+    open: f8,
+    high: f8,
+    low: f8,
+    close: f8,
+    latest_range: np.ndarray[f8],
+    smoothing: i4 = 14,
+) -> np.ndarray[f8]:
+    if smoothing <= 1:
+        return (close - open) / (high - low)
+
+    else:
+        bop_sum: f8 = 0.0
+        latest_range[:-1] = latest_range[1:]
+
+        if high - low == 0:
+            latest_range[-1] = 0
+        else:
+            latest_range[-1] = (close - open) / (high - low)
+
+        for i in range(latest_range.size):
+            bop_sum += latest_range[i]
+
+        return bop_sum / smoothing
+
+
+@nb.njit(
     parallel=NUMBA_PARALLEL,
     cache=NUMBA_DISK_CACHING,
     fastmath=NUMBA_FASTMATH,
@@ -612,18 +779,29 @@ def _bop(
     low: np.ndarray[f8],
     close: np.ndarray[f8],
     bop_container: np.ndarray[f8],
+    latest_range_container: np.ndarray[f8],
     smoothing: i4 = 14,
-):
+) -> f8:
     for i in nb.prange(bop_container.size):
         if high[i] - low[i] == 0:
             bop_container[i] = 0
         else:
             bop_container[i] = (close[i] - open[i]) / (high[i] - low[i])
 
-    if smoothing > 0:
+    # Calc bop smoothing
+    if smoothing <= 1:
+        latest_range_container[0] = bop_container[-1]
+        return
+    else:
+        # Set latest range container values
+        for i in nb.prange(smoothing):
+            latest_range_container[i] = bop_container[
+                (bop_container.size - smoothing) + i
+            ]
+
         for i in range(bop_container.size - 1, -1, -1):
-            i_1 = i + 1
             bop_sum: f8 = 0.0
+            i_1 = i + 1
 
             if i >= (smoothing - 1):
 
@@ -954,8 +1132,8 @@ def _senkou_a(
 
 
 @nb.njit(cache=NUMBA_DISK_CACHING, fastmath=NUMBA_FASTMATH, nogil=NUMBA_NOGIL)
-def _senkou_a_update(tenkan: f8, kijun: f8) -> f8:
-    return (tenkan + kijun) * 0.5
+def _senkou_a_update(tenkan: f8, kijun: f8, weight: f4 = 0.5) -> f8:
+    return (tenkan + kijun) * weight
 
 
 @nb.njit(
@@ -969,16 +1147,11 @@ def _linear_regression(
     slope_container: np.ndarray[f8],
     intercept_container: np.ndarray[f8],
     period: i4 = 14,
+    x: i4 = 0,
+    xx: i4 = 0,
 ):
     n: i8 = ys.size
     p_1: i8 = period - 1
-
-    x: i4 = 0
-    xx: i8 = 0.0
-
-    for i in nb.prange(period):
-        x += i
-        xx += i * i
 
     for i in nb.prange(p_1, n):
         y: f8 = 0.0
@@ -990,6 +1163,39 @@ def _linear_regression(
 
         slope_container[i] = ((period * xy) - (x * y)) / ((period * xx) - (x * x))
         intercept_container[i] = (y - (slope_container[i] * x)) / period
+
+
+@nb.njit(
+    # parallel=NUMBA_PARALLEL,
+    cache=NUMBA_DISK_CACHING,
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _linear_regression_update(
+    price: f8,
+    y_latest: np.ndarray[f8],
+    period: i4 = 14,
+    x: i4 = 0,
+    xx: i4 = 0,
+):
+
+    # Update the window with new value
+    y_latest[:-1] = y_latest[1:]
+    y_latest[-1] = price
+
+    # Calculate y sum and xy sum
+    y: f8 = 0.0
+    xy: f8 = 0.0
+
+    for j in range(period):
+        y += y_latest[j]
+        xy += j * y_latest[j]
+
+    # Calculate slope and intercept
+    slope = ((period * xy) - (x * y)) / ((period * xx) - (x * x))
+    intercept = (y - (slope * x)) / period
+
+    return slope, intercept
 
 
 @nb.njit(
@@ -1064,3 +1270,42 @@ def _linear_regression_r2(
             r2_container[i] = 1 - (ss_r / ss_t)
         else:
             r2_container[i] = 1.0
+
+
+@nb.njit(
+    cache=NUMBA_DISK_CACHING,
+    # parallel removed for update function
+    fastmath=NUMBA_FASTMATH,
+    nogil=NUMBA_NOGIL,
+)
+def _linear_regression_r2_update(
+    y_latest: np.ndarray[f8],
+    slope_latest: f8,
+    intercept_latest: f8,
+    period: i4 = 14,
+):
+    y_mean: f8 = 0.0
+    for j in range(period):
+        y_mean += y_latest[j]
+    y_mean /= period
+
+    ss_r: f8 = 0.0
+    ss_t: f8 = 0.0
+
+    for k in range(period):
+        y = y_latest[k]
+        p = slope_latest * k + intercept_latest
+
+        p_delta = y - p  # Residual (actual - predicted)
+        m_delta = y - y_mean  # Deviation from mean
+
+        ss_r += p_delta * p_delta
+        ss_t += m_delta * m_delta
+
+    # Calculate R²
+    if ss_t > 0.0:
+        r2 = 1.0 - (ss_r / ss_t)
+    else:
+        r2 = 1.0
+
+    return r2

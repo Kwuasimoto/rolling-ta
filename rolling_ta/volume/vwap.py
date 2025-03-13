@@ -4,7 +4,7 @@ from typing import Dict, List, Literal, Optional
 import pandas as pd
 import numpy as np
 
-from rolling_ta.extras.numba import _typical_price, _vwap
+from rolling_ta.extras.numba import _typical_price, _vwap, _vwap_update
 from rolling_ta.indicator import Indicator
 
 VWAPKeys = Literal["vwap"]
@@ -54,11 +54,18 @@ class VWAP(Indicator):
         low = self._data["low"].to_numpy(dtype=np.float64)
         close = self._data["close"].to_numpy(dtype=np.float64)
 
-        typical_price = np.zeros(close.size, dtype=np.float64)
-        _typical_price(high, low, close, typical_price)
+        price = np.zeros(close.size, dtype=np.float64)
+        _typical_price(high, low, close, price)
 
-        vwap = np.zeros(typical_price.size, dtype=np.float64)
-        _vwap(timestamp, typical_price, volume, vwap, self._period_config["vwap"])
+        vwap = np.zeros(price.size, dtype=np.float64)
+        self._raw_accum_latest, self._vol_accum_latest = _vwap(
+            timestamp=timestamp,
+            price=price,
+            volume=volume,
+            vwap_container=vwap,
+            t_gate=self._period_config["vwap"] * 60,
+        )
+        self._timestamp = timestamp[-1]
 
         if self._memory:
             self._vwap = array("d", vwap)
@@ -68,8 +75,25 @@ class VWAP(Indicator):
 
         return self
 
-    def fit(self, data, period_config: VWAPPeriods = _period_config):
-        return super().fit(data, period_config)
+    def update(self, data: pd.Series) -> Indicator:
+        vwap, self._raw_accum_latest, self._vol_accum_latest = _vwap_update(
+            timestamp=data.name,
+            high=data["high"],
+            low=data["low"],
+            close=data["close"],
+            volume=data["volume"],
+            raw_accum_latest=self._raw_accum_latest,
+            vol_accum_latest=self._vol_accum_latest,
+            t_gate=self._period_config["vwap"] * 60,
+        )
+
+        if self._memory:
+            self._vwap.append(vwap)
+
+        return self
+
+    def fit(self, data, period_config: Optional[VWAPPeriods] = None):
+        return super().fit(data, period_config or {"vwap": 1440})
 
     def to_array(self, get: VWAPKeys = "vwap"):
         return super().to_array(get)

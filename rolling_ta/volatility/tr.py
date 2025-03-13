@@ -78,7 +78,7 @@ class TrueRange(Indicator):
 
         return self
 
-    def update(self, data: pd.Series) -> np.float64:
+    def update(self, data: pd.Series) -> Indicator:
         high = data["high"]
         low = data["low"]
         close = data["close"]
@@ -89,7 +89,10 @@ class TrueRange(Indicator):
             self._tr.append(self._tr_latest)
 
         self._close_p = close
-        return self._tr_latest
+        return self
+
+    def get(self, index: int, key: TrueRangeKeys = "tr"):
+        return super().get(index, key)
 
     def fit(self, data, period_config: Dict[TrueRangePeriods, int] = _period_config):
         return super().fit(data, period_config)

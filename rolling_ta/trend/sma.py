@@ -58,6 +58,9 @@ class SMA(Indicator):
                 initialization_state=initialization_state,
             )
 
+    def get(self, index, key: SMAKeys = "sma"):
+        return super().get(index, key)
+
     def calc(self, force: bool = False, initialization_state: Optional[bool] = True):
         if self._initialized and not force:
             return

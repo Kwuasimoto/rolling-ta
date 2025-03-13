@@ -14,6 +14,20 @@ def test_wma(wma: WMA, wma_df: pd.DataFrame, evaluate: Eval):
     )
 
 
+def test_wma_update(wma: WMA, wma_df: pd.DataFrame, evaluate: Eval):
+    wma.fit(data=wma_df[:50])
+    wma.calc()
+
+    for _, ohlcv in wma_df.iloc[50:].iterrows():
+        wma.update(ohlcv)
+
+    evaluate(
+        wma_df["wma"].to_numpy(dtype=np.float64).round(6),
+        wma.to_numpy().round(6),
+        "WMA_UPDATE",
+    )
+
+
 def test_wma_to_series(wma: WMA, wma_df: pd.DataFrame, validate_series: ValidateSeries):
     validate_series(wma, wma_df, "wma")
 

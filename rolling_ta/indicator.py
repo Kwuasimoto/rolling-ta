@@ -162,6 +162,9 @@ class Indicator:
             f"{self.__class__.__name__} Indicator update function not implemented yet! sorry!"
         )
 
+    def get(self, index: int, key: Optional[Literal["unknown"]] = None):
+        return getattr(self, f"_{key}")[index]
+
     def apply_retention(self): ...
 
     def _set_initialized(self, state=True):
