@@ -91,7 +91,7 @@ sma_np = sma.to_numpy()
 sma_pd = sma.to_series()
 ```
 
-**Getting an imbedded indicator**
+**Getting an embedded indicator**
 
 ```py
 adx = ADX(data)
