@@ -1,0 +1,27 @@
+[package]
+name = "rolling-ta"
+version = "0.1.0"
+edition = "2024"
+authors = ["tomsr"]
+description = "High-performance technical analysis library with streaming support"
+license = "MIT"
+repository = "https://github.com/tomsr/rolling-ta"
+keywords = ["technical-analysis", "trading", "indicators", "finance", "streaming"]
+categories = ["science", "mathematics"]
+
+[lib]
+name = "rolling_ta"
+path = "src/lib.rs"
+
+[dependencies]
+thiserror = "2"
+
+[dev-dependencies]
+approx = "0.5"
+proptest = "1"
+criterion = "0.5"
+calamine = "0.26"  # xlsx reader for reference tests
+
+# [[bench]]
+# name = "indicators"
+# harness = false
