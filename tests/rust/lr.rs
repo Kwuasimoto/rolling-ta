@@ -1,0 +1,188 @@
+//! Linear Regression reference tests.
+//!
+//! Verifies LinearRegression, LinearRegressionR2, and LinearRegressionForecast
+//! implementations against Python rolling-ta output.
+//! Tests batch, streaming, and hybrid modes for each variant.
+
+use crate::common::{
+    assert_histories_equal, build_ohlcv_hlc, compare_values, read_xlsx_by_position,
+    slice_ohlcv, tick_at, EPSILON,
+};
+use rolling_ta::prelude::*;
+use rolling_ta::trend::{
+    LinearRegression, LinearRegressionConfig, LinearRegressionForecast, LinearRegressionR2,
+};
+
+#[test]
+fn linear_regression_modes_equivalent() {
+    // btc-linear_regression.xlsx columns:
+    // timestamp(0), high(1), low(2), close(3), typical(4), row(5), intercept(6), slope(7), lr2(8), forecast(9)
+    let cols = read_xlsx_by_position(
+        "resources/data/btc-linear_regression.xlsx",
+        &[1, 2, 3, 6, 7], // high, low, close, intercept, slope
+    );
+    let highs = &cols[0];
+    let lows = &cols[1];
+    let closes = &cols[2];
+    let expected_intercept = &cols[3];
+    let expected_slope = &cols[4];
+    let data = build_ohlcv_hlc(highs, lows, closes);
+
+    // LinearRegression outputs: slope * (period - 1) + intercept
+    let period = 14;
+    let mut expected_lr: Vec<f64> = vec![f64::NAN; data.len()];
+    for i in (period - 1)..data.len() {
+        if !expected_slope[i].is_nan() && !expected_intercept[i].is_nan() {
+            expected_lr[i] = expected_slope[i] * (period - 1) as f64 + expected_intercept[i];
+        }
+    }
+
+    // 1. Batch calculation - validate against Python reference
+    let mut batch = LinearRegression::new(LinearRegressionConfig::new(14));
+    batch.calc(&data).unwrap();
+    let lr_comparisons = compare_values("LR batch vs reference", batch.history(), &expected_lr, EPSILON);
+    println!("LR: {} values compared against Python reference", lr_comparisons);
+    assert!(lr_comparisons > 100, "Should have compared many LR values, got {}", lr_comparisons);
+
+    // 2. Full streaming
+    let mut stream = LinearRegression::new(LinearRegressionConfig::new(14));
+    for i in 0..data.len() {
+        stream.update(&tick_at(&data, i)).unwrap();
+    }
+
+    // 3. Hybrid: 50% batch + 50% streaming
+    let half = data.len() / 2;
+    let mut hybrid = LinearRegression::new(LinearRegressionConfig::new(14));
+    hybrid.calc(&slice_ohlcv(&data, 0, half)).unwrap();
+    for i in half..data.len() {
+        hybrid.update(&tick_at(&data, i)).unwrap();
+    }
+
+    let epsilon = 1e-6;
+    assert_histories_equal("LR batch vs stream", batch.history(), stream.history(), epsilon);
+    assert_histories_equal("LR batch vs hybrid", batch.history(), hybrid.history(), epsilon);
+}
+
+#[test]
+fn linear_regression_r2_modes_equivalent() {
+    let cols = read_xlsx_by_position(
+        "resources/data/btc-linear_regression.xlsx",
+        &[1, 2, 3, 8], // high, low, close, lr2
+    );
+    let highs = &cols[0];
+    let lows = &cols[1];
+    let closes = &cols[2];
+    let expected_lr2 = &cols[3];
+    let data = build_ohlcv_hlc(highs, lows, closes);
+
+    // 1. Batch calculation - validate against Python reference
+    let mut batch = LinearRegressionR2::new(LinearRegressionConfig::new(14));
+    batch.calc(&data).unwrap();
+    let lr2_comparisons = compare_values("LR2 batch vs reference", batch.history(), expected_lr2, EPSILON);
+    println!("LR2: {} values compared against Python reference", lr2_comparisons);
+    assert!(lr2_comparisons > 100, "Should have compared many LR2 values, got {}", lr2_comparisons);
+
+    // 2. Full streaming
+    let mut stream = LinearRegressionR2::new(LinearRegressionConfig::new(14));
+    for i in 0..data.len() {
+        stream.update(&tick_at(&data, i)).unwrap();
+    }
+
+    // 3. Hybrid: 50% batch + 50% streaming
+    let half = data.len() / 2;
+    let mut hybrid = LinearRegressionR2::new(LinearRegressionConfig::new(14));
+    hybrid.calc(&slice_ohlcv(&data, 0, half)).unwrap();
+    for i in half..data.len() {
+        hybrid.update(&tick_at(&data, i)).unwrap();
+    }
+
+    let epsilon = 1e-6;
+    assert_histories_equal("LR2 batch vs stream", batch.history(), stream.history(), epsilon);
+    assert_histories_equal("LR2 batch vs hybrid", batch.history(), hybrid.history(), epsilon);
+}
+
+#[test]
+fn linear_regression_forecast_modes_equivalent() {
+    let cols = read_xlsx_by_position(
+        "resources/data/btc-linear_regression.xlsx",
+        &[1, 2, 3, 9], // high, low, close, forecast
+    );
+    let highs = &cols[0];
+    let lows = &cols[1];
+    let closes = &cols[2];
+    let expected_lrf = &cols[3];
+    let data = build_ohlcv_hlc(highs, lows, closes);
+
+    // 1. Batch calculation - validate against Python reference
+    let mut batch = LinearRegressionForecast::new(LinearRegressionConfig::new(14));
+    batch.calc(&data).unwrap();
+    let lrf_comparisons = compare_values("LRF batch vs reference", batch.history(), expected_lrf, EPSILON);
+    println!("LRF: {} values compared against Python reference", lrf_comparisons);
+    assert!(lrf_comparisons > 100, "Should have compared many LRF values, got {}", lrf_comparisons);
+
+    // 2. Full streaming
+    let mut stream = LinearRegressionForecast::new(LinearRegressionConfig::new(14));
+    for i in 0..data.len() {
+        stream.update(&tick_at(&data, i)).unwrap();
+    }
+
+    // 3. Hybrid: 50% batch + 50% streaming
+    let half = data.len() / 2;
+    let mut hybrid = LinearRegressionForecast::new(LinearRegressionConfig::new(14));
+    hybrid.calc(&slice_ohlcv(&data, 0, half)).unwrap();
+    for i in half..data.len() {
+        hybrid.update(&tick_at(&data, i)).unwrap();
+    }
+
+    let epsilon = 1e-6;
+    assert_histories_equal("LRF batch vs stream", batch.history(), stream.history(), epsilon);
+    assert_histories_equal("LRF batch vs hybrid", batch.history(), hybrid.history(), epsilon);
+}
+
+#[test]
+fn linear_regression_optimized_path() {
+    // Test the calc_from_models() optimization path
+    let cols = read_xlsx_by_position(
+        "resources/data/btc-linear_regression.xlsx",
+        &[1, 2, 3, 8, 9], // high, low, close, lr2, forecast
+    );
+    let highs = &cols[0];
+    let lows = &cols[1];
+    let closes = &cols[2];
+    let expected_lr2 = &cols[3];
+    let expected_lrf = &cols[4];
+    let data = build_ohlcv_hlc(highs, lows, closes);
+
+    // Calculate LR once
+    let mut lr = LinearRegression::new(LinearRegressionConfig::new(14));
+    lr.calc(&data).unwrap();
+
+    // Reuse models for LR2
+    let mut lr2_optimized = LinearRegressionR2::new(LinearRegressionConfig::new(14));
+    lr2_optimized.calc_from_models(&data, lr.models()).unwrap();
+
+    // Compare against independent calculation
+    let mut lr2_independent = LinearRegressionR2::new(LinearRegressionConfig::new(14));
+    lr2_independent.calc(&data).unwrap();
+
+    let epsilon = 1e-10;
+    assert_histories_equal("LR2 optimized vs independent", lr2_optimized.history(), lr2_independent.history(), epsilon);
+
+    // Verify against reference
+    let lr2_cmp = compare_values("LR2 (optimized) vs reference", lr2_optimized.history(), expected_lr2, EPSILON);
+    assert!(lr2_cmp > 100, "Should have compared many LR2 values, got {}", lr2_cmp);
+
+    // Reuse models for LRF
+    let mut lrf_optimized = LinearRegressionForecast::new(LinearRegressionConfig::new(14));
+    lrf_optimized.calc_from_models(lr.models()).unwrap();
+
+    // Compare against independent calculation
+    let mut lrf_independent = LinearRegressionForecast::new(LinearRegressionConfig::new(14));
+    lrf_independent.calc(&data).unwrap();
+
+    assert_histories_equal("LRF optimized vs independent", lrf_optimized.history(), lrf_independent.history(), epsilon);
+
+    // Verify against reference
+    let lrf_cmp = compare_values("LRF (optimized) vs reference", lrf_optimized.history(), expected_lrf, EPSILON);
+    assert!(lrf_cmp > 100, "Should have compared many LRF values, got {}", lrf_cmp);
+}
