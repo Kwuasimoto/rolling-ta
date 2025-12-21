@@ -10,17 +10,34 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SMAConfig {
     pub period: usize,
+    /// Timeframe in seconds for temporal candle management (0 = disabled).
+    /// When enabled, multiple ticks within the same candle period will
+    /// update the latest value instead of pushing a new one.
+    pub timeframe: i64,
 }
 
 impl Default for SMAConfig {
     fn default() -> Self {
-        Self { period: 14 }
+        Self {
+            period: 14,
+            timeframe: 0,
+        }
     }
 }
 
 impl SMAConfig {
+    /// Create a new SMA config with period (temporal mode disabled).
     pub fn new(period: usize) -> Self {
-        Self { period }
+        Self { period, timeframe: 0 }
+    }
+
+    /// Create a new SMA config with period and timeframe for temporal mode.
+    ///
+    /// # Arguments
+    /// * `period` - Number of periods for the moving average
+    /// * `timeframe` - Timeframe in seconds (60=1m, 300=5m, 900=15m)
+    pub fn with_timeframe(period: usize, timeframe: i64) -> Self {
+        Self { period, timeframe }
     }
 }
 
