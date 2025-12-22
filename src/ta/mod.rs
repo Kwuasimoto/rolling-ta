@@ -6,29 +6,38 @@ pub mod config;
 pub mod error;
 pub mod math;
 pub mod state;
+pub mod temporal;
 pub mod types;
 pub mod utils;
 
 // Indicator categories
-pub mod momentum;
 pub mod trend;
-pub mod volatility;
-pub mod volume;
+// TODO: Migrate to new Indicator trait (calc(&[Ohlcv]), next(), no update())
+// pub mod momentum;
+// pub mod volatility;
+// pub mod volume;
 
 use error::TAResult;
 use state::IndicatorState;
-use types::{Ohlcv, OhlcvSeries};
+use types::Ohlcv;
 
 /// Core indicator trait.
 ///
 /// All indicators implement this trait, providing a unified interface for
-/// both batch calculation and streaming updates.
+/// batch calculation and streaming updates.
 ///
 /// # Contract
 ///
 /// - `calc()` processes historical batch data, transitions state to Ready
-/// - `update()` processes single ticks after warmup is complete
+/// - `next()` processes snapshot slices from a shared window (parallel-safe)
 /// - `reset()` returns indicator to Uninitialized state
+///
+/// # Data Format
+///
+/// All methods use `&[Ohlcv]` (array-of-structs) for consistency:
+/// - Tests mirror runtime exactly
+/// - No conversion between formats
+/// - Use `Ohlcv::closes()`, `Ohlcv::highs()` etc. to extract fields
 ///
 /// # Example
 ///
@@ -38,14 +47,14 @@ use types::{Ohlcv, OhlcvSeries};
 ///
 /// let mut sma = SMA::new(SMAConfig::new(14));
 ///
-/// // Batch mode
-/// let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, /* ... */]);
-/// sma.calc(&data)?;
+/// // Batch mode (historical backfill)
+/// let candles: Vec<Ohlcv> = load_from_db();
+/// sma.calc(&candles)?;
 /// assert!(sma.state().is_ready());
 ///
-/// // Streaming mode
-/// let tick = Ohlcv::from_close(4.0);
-/// if let Some(value) = sma.update(&tick)? {
+/// // Streaming mode (shared window snapshot)
+/// let snapshot = shared_window.read().unwrap().snapshot_last(14);
+/// if let Some(value) = sma.next(&snapshot) {
 ///     println!("SMA: {}", value);
 /// }
 /// ```
@@ -62,17 +71,30 @@ pub trait Indicator: Send + Sync {
     /// Current calculation state.
     fn state(&self) -> IndicatorState;
 
-    /// Batch calculation over historical data.
+    /// Batch calculation over historical candle data.
     ///
     /// Processes all data and transitions to `Ready` state.
     /// Returns `Err` if data is insufficient for warmup.
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self>;
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self>;
 
-    /// Single-tick streaming update.
+    /// Streaming calculation from shared-window snapshot.
     ///
+    /// Receives a slice of candles (typically last N based on warmup_period).
     /// Returns `None` during warmup, `Some(output)` when ready.
-    /// Can be called without prior `calc()` - will warm up from ticks.
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>>;
+    ///
+    /// This method is designed for use with `SharedWindow` and Rayon:
+    /// - Takes immutable snapshot (parallel-safe)
+    /// - Computes directly from slice (no internal window needed)
+    /// - Tracks state and history internally
+    ///
+    /// # Example
+    /// ```ignore
+    /// let snapshot = window.read().unwrap().snapshot_last(indicator.warmup_period());
+    /// if let Some(value) = indicator.next(&snapshot) {
+    ///     // Use value
+    /// }
+    /// ```
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output>;
 
     /// Get the most recent output value.
     ///

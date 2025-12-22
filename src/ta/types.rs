@@ -159,6 +159,62 @@ impl Ohlcv {
         let lc = (self.low.0 - prev_close).abs();
         hl.max(hc).max(lc)
     }
+
+    // ============================================================
+    // Slice Helper Methods
+    // ============================================================
+    // These extract specific fields from candle slices, enabling
+    // the transition from OhlcvSeries (struct-of-arrays) to
+    // &[Ohlcv] (array-of-structs) everywhere.
+
+    /// Extract close prices from a candle slice.
+    ///
+    /// # Example
+    /// ```
+    /// use rolling_ta::prelude::Ohlcv;
+    ///
+    /// let candles = vec![
+    ///     Ohlcv::from_close(100.0),
+    ///     Ohlcv::from_close(101.0),
+    ///     Ohlcv::from_close(102.0),
+    /// ];
+    /// let closes = Ohlcv::closes(&candles);
+    /// assert_eq!(closes, vec![100.0, 101.0, 102.0]);
+    /// ```
+    #[inline]
+    pub fn closes(candles: &[Ohlcv]) -> Vec<f64> {
+        candles.iter().map(|c| c.close.0).collect()
+    }
+
+    /// Extract high prices from a candle slice.
+    #[inline]
+    pub fn highs(candles: &[Ohlcv]) -> Vec<f64> {
+        candles.iter().map(|c| c.high.0).collect()
+    }
+
+    /// Extract low prices from a candle slice.
+    #[inline]
+    pub fn lows(candles: &[Ohlcv]) -> Vec<f64> {
+        candles.iter().map(|c| c.low.0).collect()
+    }
+
+    /// Extract volumes from a candle slice.
+    #[inline]
+    pub fn volumes(candles: &[Ohlcv]) -> Vec<f64> {
+        candles.iter().map(|c| c.volume.0).collect()
+    }
+
+    /// Extract open prices from a candle slice.
+    #[inline]
+    pub fn opens(candles: &[Ohlcv]) -> Vec<f64> {
+        candles.iter().map(|c| c.open.0).collect()
+    }
+
+    /// Extract timestamps from a candle slice.
+    #[inline]
+    pub fn timestamps(candles: &[Ohlcv]) -> Vec<i64> {
+        candles.iter().map(|c| c.timestamp.0).collect()
+    }
 }
 
 /// Historical OHLCV data series.
@@ -326,5 +382,29 @@ mod tests {
         assert_eq!((p1 - p2).0, 50.0);
         assert_eq!((p1 * 2.0).0, 200.0);
         assert_eq!((p1 / 2.0).0, 50.0);
+    }
+
+    #[test]
+    fn ohlcv_slice_helpers() {
+        let candles = vec![
+            Ohlcv::new(1000, 100.0, 105.0, 95.0, 102.0, 1000.0),
+            Ohlcv::new(1060, 102.0, 108.0, 100.0, 106.0, 1500.0),
+            Ohlcv::new(1120, 106.0, 110.0, 104.0, 108.0, 1200.0),
+        ];
+
+        assert_eq!(Ohlcv::closes(&candles), vec![102.0, 106.0, 108.0]);
+        assert_eq!(Ohlcv::highs(&candles), vec![105.0, 108.0, 110.0]);
+        assert_eq!(Ohlcv::lows(&candles), vec![95.0, 100.0, 104.0]);
+        assert_eq!(Ohlcv::opens(&candles), vec![100.0, 102.0, 106.0]);
+        assert_eq!(Ohlcv::volumes(&candles), vec![1000.0, 1500.0, 1200.0]);
+        assert_eq!(Ohlcv::timestamps(&candles), vec![1000, 1060, 1120]);
+    }
+
+    #[test]
+    fn ohlcv_slice_helpers_empty() {
+        let candles: Vec<Ohlcv> = vec![];
+        assert!(Ohlcv::closes(&candles).is_empty());
+        assert!(Ohlcv::highs(&candles).is_empty());
+        assert!(Ohlcv::lows(&candles).is_empty());
     }
 }

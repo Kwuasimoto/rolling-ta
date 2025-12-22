@@ -1,8 +1,40 @@
 //! Rolling window utilities.
 
 use std::collections::VecDeque;
+use std::sync::{Arc, RwLock};
 
 use crate::prelude::Ohlcv;
+
+/// Type alias for a shared, thread-safe rolling window.
+///
+/// This enables multiple indicators to share a single window without
+/// duplicating data. The window owner pushes candles with a write lock,
+/// and indicators read snapshots with a read lock.
+///
+/// # Example
+/// ```
+/// use rolling_ta::ta::math::{SharedWindow, RollingWindow};
+/// use rolling_ta::prelude::Ohlcv;
+/// use std::sync::{Arc, RwLock};
+///
+/// // Create shared window
+/// let window: SharedWindow = Arc::new(RwLock::new(
+///     RollingWindow::with_timeframe(1440, 60)
+/// ));
+///
+/// // Push candle (write lock)
+/// {
+///     let mut w = window.write().unwrap();
+///     w.push(Ohlcv::from_close(100.0));
+/// }
+///
+/// // Read snapshot (read lock)
+/// let snapshot = {
+///     let r = window.read().unwrap();
+///     r.snapshot()
+/// };
+/// ```
+pub type SharedWindow = Arc<RwLock<RollingWindow>>;
 
 /// Temporal state for candle period detection.
 ///
@@ -142,6 +174,19 @@ impl RollingWindow {
         }
     }
 
+    /// Push a single value (convenience wrapper for Ohlcv::from_close).
+    ///
+    /// This is useful for indicators that only work with close prices
+    /// or single values (e.g., typical price for linear regression).
+    /// Returns the close value of the removed candle if any.
+    ///
+    /// Note: This ignores temporal state. For temporal-aware operations,
+    /// use `push_with_timestamp()` instead.
+    #[inline]
+    pub fn push_value(&mut self, value: f64) -> Option<f64> {
+        self.push(Ohlcv::from_close(value)).map(|c| c.close.0)
+    }
+
     /// Update the most recent candle (back of window).
     ///
     /// Adjusts cached sum accordingly. Used for updating a candle
@@ -176,6 +221,17 @@ impl RollingWindow {
             self.temporal.record(candle.timestamp.0);
             true
         }
+    }
+
+    /// Process a value with timestamp (push or update based on period).
+    ///
+    /// Convenience wrapper that creates an Ohlcv from close price.
+    /// See `push_with_timestamp` for full documentation.
+    ///
+    /// Returns `true` if pushed (new value), `false` if updated (same period).
+    pub fn push_value_with_timestamp(&mut self, timestamp: i64, value: f64) -> bool {
+        let candle = Ohlcv::new(timestamp, value, value, value, value, 0.0);
+        self.push_with_timestamp(candle)
     }
 
     /// Get current sum of all values.
@@ -255,6 +311,72 @@ impl RollingWindow {
 
     pub fn to_vec(&self) -> Vec<Ohlcv> {
         self.buffer.iter().cloned().collect()
+    }
+
+    /// Get close values as a Vec<f64>.
+    ///
+    /// This is useful for indicators that only need close prices
+    /// (e.g., linear regression on typical prices).
+    #[inline]
+    pub fn to_values(&self) -> Vec<f64> {
+        self.buffer.iter().map(|c| c.close.0).collect()
+    }
+
+    /// Take a snapshot of all candles in the window.
+    ///
+    /// Returns a new `Vec<Ohlcv>` containing copies of all candles from
+    /// oldest to newest. This is the primary method for indicators to
+    /// obtain data from a shared window.
+    ///
+    /// # Example
+    /// ```
+    /// use rolling_ta::ta::math::RollingWindow;
+    /// use rolling_ta::prelude::Ohlcv;
+    ///
+    /// let mut window = RollingWindow::new(3);
+    /// window.push(Ohlcv::from_close(1.0));
+    /// window.push(Ohlcv::from_close(2.0));
+    ///
+    /// let snapshot = window.snapshot();
+    /// assert_eq!(snapshot.len(), 2);
+    /// ```
+    #[inline]
+    pub fn snapshot(&self) -> Vec<Ohlcv> {
+        self.buffer.iter().copied().collect()
+    }
+
+    /// Take a snapshot of the last N candles in the window.
+    ///
+    /// Returns a new `Vec<Ohlcv>` containing the most recent N candles.
+    /// If the window has fewer than N candles, returns all available candles.
+    ///
+    /// This is useful for indicators that only need a subset of the window
+    /// (e.g., a 14-period SMA only needs 14 candles, even if the shared
+    /// window holds 1440 candles for other indicators like VWAP).
+    ///
+    /// # Example
+    /// ```
+    /// use rolling_ta::ta::math::RollingWindow;
+    /// use rolling_ta::prelude::Ohlcv;
+    ///
+    /// let mut window = RollingWindow::new(10);
+    /// for i in 1..=10 {
+    ///     window.push(Ohlcv::from_close(i as f64));
+    /// }
+    ///
+    /// let last_3 = window.snapshot_last(3);
+    /// assert_eq!(last_3.len(), 3);
+    /// assert_eq!(last_3[0].close.0, 8.0);
+    /// assert_eq!(last_3[2].close.0, 10.0);
+    /// ```
+    #[inline]
+    pub fn snapshot_last(&self, n: usize) -> Vec<Ohlcv> {
+        let len = self.buffer.len();
+        if n >= len {
+            self.buffer.iter().copied().collect()
+        } else {
+            self.buffer.iter().skip(len - n).copied().collect()
+        }
     }
 
     /// Access temporal state (immutable).
@@ -420,15 +542,15 @@ mod tests {
     fn rolling_window_basic() {
         let mut window = RollingWindow::new(3);
 
-        assert!(window.push(1.0).is_none());
-        assert!(window.push(2.0).is_none());
-        assert!(window.push(3.0).is_none());
+        assert!(window.push_value(1.0).is_none());
+        assert!(window.push_value(2.0).is_none());
+        assert!(window.push_value(3.0).is_none());
         assert!(window.is_full());
         assert_eq!(window.sum(), 6.0);
         assert_eq!(window.mean(), 2.0);
 
         // Push beyond capacity
-        let removed = window.push(4.0);
+        let removed = window.push_value(4.0);
         assert_eq!(removed, Some(1.0));
         assert_eq!(window.sum(), 9.0); // 2 + 3 + 4
         assert_eq!(window.mean(), 3.0);
@@ -521,16 +643,16 @@ mod tests {
     #[test]
     fn rolling_window_update_back() {
         let mut window = RollingWindow::new(3);
-        window.push(1.0);
-        window.push(2.0);
-        window.push(3.0);
+        window.push_value(1.0);
+        window.push_value(2.0);
+        window.push_value(3.0);
         assert_eq!(window.sum(), 6.0);
-        assert_eq!(window.back(), Some(3.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(3.0));
 
         // Update back from 3.0 to 5.0
-        let old = window.update_back(5.0);
-        assert_eq!(old, Some(3.0));
-        assert_eq!(window.back(), Some(5.0));
+        let old = window.update_back(Ohlcv::from_close(5.0));
+        assert_eq!(old.map(|c| c.close.0), Some(3.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(5.0));
         assert_eq!(window.sum(), 8.0); // 1 + 2 + 5 = 8
         assert_eq!(window.mean(), 8.0 / 3.0);
     }
@@ -538,7 +660,7 @@ mod tests {
     #[test]
     fn rolling_window_update_back_empty() {
         let mut window = RollingWindow::new(3);
-        let old = window.update_back(5.0);
+        let old = window.update_back(Ohlcv::from_close(5.0));
         assert!(old.is_none());
     }
 
@@ -549,23 +671,23 @@ mod tests {
         assert_eq!(window.temporal().timeframe(), 300);
 
         // First candle (pushed)
-        assert!(window.push_with_timestamp(1000, 100.0)); // true - first candle
+        assert!(window.push_value_with_timestamp(1000, 100.0)); // true - first candle
         assert_eq!(window.len(), 1);
-        assert_eq!(window.back(), Some(100.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(100.0));
 
         // Same candle updates (same 5-min period: 1000/300 = 3)
-        assert!(!window.push_with_timestamp(1060, 101.0)); // false - updated
+        assert!(!window.push_value_with_timestamp(1060, 101.0)); // false - updated
         assert_eq!(window.len(), 1); // Still 1 entry
-        assert_eq!(window.back(), Some(101.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(101.0));
 
-        assert!(!window.push_with_timestamp(1120, 102.0)); // false - updated
+        assert!(!window.push_value_with_timestamp(1120, 102.0)); // false - updated
         assert_eq!(window.len(), 1);
-        assert_eq!(window.back(), Some(102.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(102.0));
 
         // New candle (different period: 1500/300 = 5)
-        assert!(window.push_with_timestamp(1500, 105.0)); // true - new candle
+        assert!(window.push_value_with_timestamp(1500, 105.0)); // true - new candle
         assert_eq!(window.len(), 2);
-        assert_eq!(window.back(), Some(105.0));
+        assert_eq!(window.back().map(|c| c.close.0), Some(105.0));
 
         // Verify temporal state
         assert_eq!(window.temporal().last_timestamp(), Some(1500));
@@ -577,10 +699,10 @@ mod tests {
         let mut window = RollingWindow::new(3);
         assert!(!window.temporal().is_enabled());
 
-        // Every push_with_timestamp should push (never update)
-        assert!(window.push_with_timestamp(1000, 1.0));
-        assert!(window.push_with_timestamp(1000, 2.0)); // Same timestamp, still pushes
-        assert!(window.push_with_timestamp(1000, 3.0));
+        // Every push_value_with_timestamp should push (never update)
+        assert!(window.push_value_with_timestamp(1000, 1.0));
+        assert!(window.push_value_with_timestamp(1000, 2.0)); // Same timestamp, still pushes
+        assert!(window.push_value_with_timestamp(1000, 3.0));
         assert_eq!(window.len(), 3);
     }
 
@@ -635,7 +757,7 @@ mod tests {
     #[test]
     fn rolling_window_clear_resets_temporal() {
         let mut window = RollingWindow::with_timeframe(3, 60);
-        window.push_with_timestamp(1000, 100.0);
+        window.push_value_with_timestamp(1000, 100.0);
         assert!(window.temporal().last_timestamp().is_some());
 
         window.clear();
@@ -652,5 +774,74 @@ mod tests {
         window.clear();
         assert!(window.is_empty());
         assert!(window.temporal().last_timestamp().is_none());
+    }
+
+    // Snapshot tests
+
+    #[test]
+    fn rolling_window_snapshot() {
+        let mut window = RollingWindow::new(5);
+        for i in 1..=3 {
+            window.push(Ohlcv::from_close(i as f64));
+        }
+
+        let snapshot = window.snapshot();
+        assert_eq!(snapshot.len(), 3);
+        assert_eq!(snapshot[0].close.0, 1.0);
+        assert_eq!(snapshot[1].close.0, 2.0);
+        assert_eq!(snapshot[2].close.0, 3.0);
+    }
+
+    #[test]
+    fn rolling_window_snapshot_empty() {
+        let window = RollingWindow::new(5);
+        let snapshot = window.snapshot();
+        assert!(snapshot.is_empty());
+    }
+
+    #[test]
+    fn rolling_window_snapshot_last() {
+        let mut window = RollingWindow::new(10);
+        for i in 1..=10 {
+            window.push(Ohlcv::from_close(i as f64));
+        }
+
+        // Get last 3
+        let last_3 = window.snapshot_last(3);
+        assert_eq!(last_3.len(), 3);
+        assert_eq!(last_3[0].close.0, 8.0);
+        assert_eq!(last_3[1].close.0, 9.0);
+        assert_eq!(last_3[2].close.0, 10.0);
+
+        // Get last 5
+        let last_5 = window.snapshot_last(5);
+        assert_eq!(last_5.len(), 5);
+        assert_eq!(last_5[0].close.0, 6.0);
+        assert_eq!(last_5[4].close.0, 10.0);
+    }
+
+    #[test]
+    fn rolling_window_snapshot_last_more_than_available() {
+        let mut window = RollingWindow::new(10);
+        for i in 1..=3 {
+            window.push(Ohlcv::from_close(i as f64));
+        }
+
+        // Request more than available - should return all
+        let snapshot = window.snapshot_last(100);
+        assert_eq!(snapshot.len(), 3);
+        assert_eq!(snapshot[0].close.0, 1.0);
+        assert_eq!(snapshot[2].close.0, 3.0);
+    }
+
+    #[test]
+    fn rolling_window_snapshot_last_zero() {
+        let mut window = RollingWindow::new(5);
+        for i in 1..=3 {
+            window.push(Ohlcv::from_close(i as f64));
+        }
+
+        let snapshot = window.snapshot_last(0);
+        assert!(snapshot.is_empty());
     }
 }

@@ -3,15 +3,17 @@
 use crate::ta::{
     config::SMAConfig,
     error::{TAError, TAResult},
-    math::RollingWindow,
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
-    Indicator, HistoricalIndicator,
+    types::Ohlcv,
+    HistoricalIndicator, Indicator,
 };
 
 /// Simple Moving Average indicator.
 ///
 /// Calculates the arithmetic mean of prices over a rolling window.
+/// This indicator is stateless regarding window ownership - it computes
+/// directly from `&[Ohlcv]` slices, making it suitable for SharedWindow
+/// architecture and parallel computation with Rayon.
 ///
 /// # Formula
 ///
@@ -21,12 +23,18 @@ use crate::ta::{
 ///
 /// ```
 /// use rolling_ta::ta::trend::{SMA, SMAConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut sma = SMA::new(SMAConfig::new(3));
-/// let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-/// sma.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = vec![
+///     Ohlcv::from_close(1.0),
+///     Ohlcv::from_close(2.0),
+///     Ohlcv::from_close(3.0),
+///     Ohlcv::from_close(4.0),
+///     Ohlcv::from_close(5.0),
+/// ];
+/// sma.calc(&candles).unwrap();
 ///
 /// assert!(sma.state().is_ready());
 /// ```
@@ -36,24 +44,16 @@ pub struct SMA {
     state: IndicatorState,
     history: Vec<f64>,
     latest: Option<f64>,
-    window: RollingWindow,
 }
 
 impl SMA {
     /// Create a new SMA indicator with the given configuration.
     pub fn new(config: SMAConfig) -> Self {
-        let window = if config.timeframe > 0 {
-            RollingWindow::with_timeframe(config.period, config.timeframe)
-        } else {
-            RollingWindow::new(config.period)
-        };
-
         Self {
             config,
             state: IndicatorState::Uninitialized,
             history: Vec::new(),
             latest: None,
-            window,
         }
     }
 
@@ -63,16 +63,25 @@ impl SMA {
         self.config.period
     }
 
-    /// Get the timeframe (0 = temporal mode disabled).
+    /// Compute SMA from the last N candles of a slice.
+    ///
+    /// This is the core computation used by both `calc()` and `next()`.
+    /// Parallel-safe: only reads from immutable slice.
     #[inline]
-    pub fn timeframe(&self) -> i64 {
-        self.config.timeframe
-    }
+    fn compute_from_slice(candles: &[Ohlcv], period: usize) -> f64 {
+        let len = candles.len();
+        if len < period {
+            return f64::NAN;
+        }
 
-    /// Check if temporal mode is enabled.
-    #[inline]
-    pub fn is_temporal(&self) -> bool {
-        self.config.timeframe > 0
+        let sum: f64 = candles
+            .iter()
+            .rev()
+            .take(period)
+            .map(|c| c.close.0)
+            .sum();
+
+        sum / period as f64
     }
 }
 
@@ -90,7 +99,7 @@ impl Indicator for SMA {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
 
         if data.len() < period {
@@ -104,26 +113,22 @@ impl Indicator for SMA {
             return Err(TAError::InvalidPeriod(0));
         }
 
-        // Reset window (preserves capacity and temporal config)
-        self.window.clear();
         self.history = Vec::with_capacity(data.len());
 
-        // Build initial window
-        for i in 0..period {
-            let candle = data.get(i).unwrap();
-            self.window.push(candle);
+        // Fill NaN for warmup period
+        for _ in 0..(period - 1) {
             self.history.push(f64::NAN);
         }
 
-        // First valid SMA
-        let first_sma = self.window.mean();
-        self.history[period - 1] = first_sma;
+        // Compute initial sum for first SMA
+        let mut sum: f64 = data.iter().take(period).map(|c| c.close.0).sum();
+        let first_sma = sum / period as f64;
+        self.history.push(first_sma);
 
-        // Rolling calculation
+        // Rolling calculation: subtract oldest, add newest
         for i in period..data.len() {
-            let candle = data.get(i).unwrap();
-            self.window.push(candle);
-            let sma = self.window.mean();
+            sum = sum - data[i - period].close.0 + data[i].close.0;
+            let sma = sum / period as f64;
             self.history.push(sma);
         }
 
@@ -133,38 +138,24 @@ impl Indicator for SMA {
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        // Use temporal-aware push (handles both new candle and same-period update)
-        let is_new_candle = self.window.push_with_timestamp(*tick);
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let period = self.config.period;
 
-        if is_new_candle {
-            // New candle: increment state and append to history
-            self.state = self.state.increment(self.config.period);
-
-            if self.state.is_ready() {
-                let sma = self.window.mean();
-                self.history.push(sma);
-                self.latest = Some(sma);
-                Ok(Some(sma))
-            } else {
-                self.history.push(f64::NAN);
-                Ok(None)
-            }
-        } else {
-            // Same candle period: update latest value in place
-            if self.state.is_ready() {
-                let sma = self.window.mean();
-                // Update the last history entry instead of appending
-                if let Some(last) = self.history.last_mut() {
-                    *last = sma;
-                }
-                self.latest = Some(sma);
-                Ok(Some(sma))
-            } else {
-                // Still warming up, just update the last NAN entry
-                Ok(None)
-            }
+        if candles.len() < period {
+            // Not enough data - still warming up
+            self.state = self.state.increment(period);
+            return None;
         }
+
+        // Compute SMA from last `period` candles
+        let sma = Self::compute_from_slice(candles, period);
+
+        // Update state
+        self.latest = Some(sma);
+        self.history.push(sma);
+        self.state = IndicatorState::Ready;
+
+        Some(sma)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -172,7 +163,6 @@ impl Indicator for SMA {
     }
 
     fn reset(&mut self) {
-        self.window.clear();
         self.history.clear();
         self.latest = None;
         self.state = IndicatorState::Uninitialized;
@@ -208,12 +198,21 @@ impl HistoricalIndicator for SMA {
 mod tests {
     use super::*;
 
+    /// Helper to build candles from close prices (for testing).
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 0.0))
+            .collect()
+    }
+
     #[test]
     fn sma_batch_calculation() {
         let mut sma = SMA::new(SMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        sma.calc(&data).unwrap();
+        sma.calc(&candles).unwrap();
 
         assert!(sma.state().is_ready());
         assert_eq!(sma.len(), 5);
@@ -231,28 +230,33 @@ mod tests {
     }
 
     #[test]
-    fn sma_streaming_update() {
+    fn sma_streaming_next() {
         let mut sma = SMA::new(SMAConfig::new(3));
 
-        // Warmup
-        assert!(sma.update(&Ohlcv::from_close(1.0)).unwrap().is_none());
-        assert!(sma.update(&Ohlcv::from_close(2.0)).unwrap().is_none());
+        // Warmup - not enough candles
+        let snap1 = candles_from_closes(&[1.0]);
+        assert!(sma.next(&snap1).is_none());
+
+        let snap2 = candles_from_closes(&[1.0, 2.0]);
+        assert!(sma.next(&snap2).is_none());
 
         // Now should be ready
-        let result = sma.update(&Ohlcv::from_close(3.0)).unwrap();
+        let snap3 = candles_from_closes(&[1.0, 2.0, 3.0]);
+        let result = sma.next(&snap3);
         assert!(result.is_some());
-        assert!((result.unwrap() - 2.0).abs() < 0.0001);
+        assert!((result.unwrap() - 2.0).abs() < 0.0001); // (1+2+3)/3 = 2
 
         // Continue streaming
-        let result = sma.update(&Ohlcv::from_close(4.0)).unwrap();
-        assert!((result.unwrap() - 3.0).abs() < 0.0001);
+        let snap4 = candles_from_closes(&[1.0, 2.0, 3.0, 4.0]);
+        let result = sma.next(&snap4);
+        assert!((result.unwrap() - 3.0).abs() < 0.0001); // (2+3+4)/3 = 3
     }
 
     #[test]
     fn sma_negative_indexing() {
         let mut sma = SMA::new(SMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-        sma.calc(&data).unwrap();
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        sma.calc(&candles).unwrap();
 
         // -1 should be last value (4.0)
         assert!((sma.get(-1).unwrap() - 4.0).abs() < 0.0001);
@@ -263,17 +267,17 @@ mod tests {
     #[test]
     fn sma_insufficient_data() {
         let mut sma = SMA::new(SMAConfig::new(10));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0]);
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0]);
 
-        let result = sma.calc(&data);
+        let result = sma.calc(&candles);
         assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 
     #[test]
     fn sma_reset() {
         let mut sma = SMA::new(SMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-        sma.calc(&data).unwrap();
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        sma.calc(&candles).unwrap();
 
         assert!(sma.state().is_ready());
 
@@ -284,114 +288,52 @@ mod tests {
         assert!(sma.latest().is_none());
     }
 
-    // Temporal tests
-
     #[test]
-    fn sma_temporal_config() {
-        // Non-temporal (default)
-        let sma = SMA::new(SMAConfig::new(14));
-        assert!(!sma.is_temporal());
-        assert_eq!(sma.timeframe(), 0);
+    fn sma_compute_from_slice() {
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        // Temporal mode
-        let sma = SMA::new(SMAConfig::with_timeframe(14, 60));
-        assert!(sma.is_temporal());
-        assert_eq!(sma.timeframe(), 60);
+        // Last 3: [3, 4, 5] -> mean = 4
+        let sma = SMA::compute_from_slice(&candles, 3);
+        assert!((sma - 4.0).abs() < 0.0001);
+
+        // Last 5: [1, 2, 3, 4, 5] -> mean = 3
+        let sma = SMA::compute_from_slice(&candles, 5);
+        assert!((sma - 3.0).abs() < 0.0001);
+
+        // Insufficient data
+        let sma = SMA::compute_from_slice(&candles, 10);
+        assert!(sma.is_nan());
     }
 
     #[test]
-    fn sma_temporal_same_period_updates_in_place() {
-        // 1-minute timeframe (60 seconds)
-        let mut sma = SMA::new(SMAConfig::with_timeframe(3, 60));
-
-        // Warmup with different candle periods
-        // Period 16: timestamp 960
-        sma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        assert_eq!(sma.len(), 1);
-
-        // Period 17: timestamp 1020
-        sma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(sma.len(), 2);
-
-        // Period 18: timestamp 1080 - this should be ready
-        let result = sma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 2.0).abs() < 0.0001); // (1+2+3)/3 = 2
-        assert_eq!(sma.len(), 3);
-
-        // Same period (still 18): timestamp 1100 - should update in place
-        let result = sma.update(&Ohlcv::new(1100, 6.0, 6.0, 6.0, 6.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 3.0).abs() < 0.0001); // (1+2+6)/3 = 3
-        assert_eq!(sma.len(), 3); // Still 3, not 4!
-
-        // Same period again: timestamp 1110 - should update in place again
-        let result = sma.update(&Ohlcv::new(1110, 9.0, 9.0, 9.0, 9.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 4.0).abs() < 0.0001); // (1+2+9)/3 = 4
-        assert_eq!(sma.len(), 3); // Still 3!
-    }
-
-    #[test]
-    fn sma_temporal_new_period_pushes() {
-        // 5-minute timeframe (300 seconds)
-        let mut sma = SMA::new(SMAConfig::with_timeframe(3, 300));
-
-        // Period 3: timestamps 900-1199
-        sma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        sma.update(&Ohlcv::new(1100, 1.5, 1.5, 1.5, 1.5, 0.0)).unwrap(); // Same period, updates
-        assert_eq!(sma.len(), 1);
-
-        // Period 4: timestamps 1200-1499
-        sma.update(&Ohlcv::new(1200, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(sma.len(), 2);
-
-        // Period 5: timestamps 1500-1799 - should be ready
-        let result = sma.update(&Ohlcv::new(1500, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        // Window has: 1.5 (updated), 2.0, 3.0 -> mean = 6.5/3 ≈ 2.1667
-        assert!((result.unwrap() - 2.1667).abs() < 0.01);
-        assert_eq!(sma.len(), 3);
-
-        // Period 6: timestamp 1800 - new period
-        let result = sma.update(&Ohlcv::new(1800, 4.0, 4.0, 4.0, 4.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        // Window has: 2.0, 3.0, 4.0 -> mean = 3.0
-        assert!((result.unwrap() - 3.0).abs() < 0.0001);
-        assert_eq!(sma.len(), 4);
-    }
-
-    #[test]
-    fn sma_non_temporal_always_pushes() {
-        // Non-temporal mode (timeframe = 0)
+    fn sma_next_only_uses_last_n_candles() {
         let mut sma = SMA::new(SMAConfig::new(3));
 
-        // All at same timestamp - should still push each one
-        sma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        sma.update(&Ohlcv::new(1000, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        sma.update(&Ohlcv::new(1000, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+        // Large snapshot, but SMA only needs last 3
+        let candles = candles_from_closes(&[100.0, 200.0, 1.0, 2.0, 3.0]);
+        let result = sma.next(&candles);
 
-        assert_eq!(sma.len(), 3);
-        assert!(sma.state().is_ready());
+        // Should compute from last 3: [1, 2, 3] -> mean = 2
+        assert!(result.is_some());
+        assert!((result.unwrap() - 2.0).abs() < 0.0001);
     }
 
     #[test]
-    fn sma_temporal_reset_preserves_config() {
-        let mut sma = SMA::new(SMAConfig::with_timeframe(3, 60));
+    fn sma_parallel_safe() {
+        // Verify next() works with shared data (simulating Rayon usage)
+        use std::sync::Arc;
 
-        // Add some data
-        sma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        sma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        sma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+        let candles = Arc::new(candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]));
 
-        assert!(sma.is_temporal());
-        assert_eq!(sma.timeframe(), 60);
+        let mut sma1 = SMA::new(SMAConfig::new(3));
+        let mut sma2 = SMA::new(SMAConfig::new(3));
 
-        sma.reset();
+        // Both can read from the same snapshot
+        let snapshot: &[Ohlcv] = &candles;
+        let r1 = sma1.next(snapshot);
+        let r2 = sma2.next(snapshot);
 
-        // Temporal config should be preserved
-        assert!(sma.is_temporal());
-        assert_eq!(sma.timeframe(), 60);
-        assert!(sma.state().is_uninitialized());
+        assert_eq!(r1, r2);
+        assert!((r1.unwrap() - 4.0).abs() < 0.0001);
     }
 }

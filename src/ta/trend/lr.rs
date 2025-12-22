@@ -90,14 +90,14 @@ impl Indicator for LinearRegression {
 
         // Fill initial warmup period with NaN and default models
         for i in 0..period - 1 {
-            self.window.push(typical_prices[i]);
+            self.window.push_value(typical_prices[i]);
             self.history.push(f64::NAN);
             self.models.push(LinearModel::default());
         }
 
         // First valid regression at index period - 1
-        self.window.push(typical_prices[period - 1]);
-        self.model = linear_regression(&self.window.to_vec())
+        self.window.push_value(typical_prices[period - 1]);
+        self.model = linear_regression(&self.window.to_values())
             .map_err(|e| TAError::InvalidData(format!("Initial linear regression failed: {}", e)))?;
 
         // Calculate fitted value at x = period - 1 (the current point)
@@ -107,8 +107,8 @@ impl Indicator for LinearRegression {
 
         // Rolling regression for remaining data
         for i in period..n {
-            self.window.push(typical_prices[i]);
-            self.model = linear_regression(&self.window.to_vec())
+            self.window.push_value(typical_prices[i]);
+            self.model = linear_regression(&self.window.to_values())
                 .map_err(|e| TAError::InvalidData(format!("Rolling linear regression failed at index {}: {}", i, e)))?;
 
             // Fitted value at x = period - 1 (the current point in the window)
@@ -128,7 +128,7 @@ impl Indicator for LinearRegression {
         let typical_price = (tick.high.0 + tick.low.0 + tick.close.0) / 3.0;
 
         // Add to rolling window
-        self.window.push(typical_price);
+        self.window.push_value(typical_price);
 
         match self.state {
             IndicatorState::Uninitialized | IndicatorState::Warming { .. } => {
@@ -137,7 +137,7 @@ impl Indicator for LinearRegression {
 
                 if self.window.len() >= period {
                     // Ready to calculate first regression
-                    self.model = linear_regression(&self.window.to_vec())
+                    self.model = linear_regression(&self.window.to_values())
                         .map_err(|e| TAError::InvalidData(format!("Linear regression failed: {}", e)))?;
 
                     let lr_value = self.model.slope * (period - 1) as f64 + self.model.intercept;
@@ -158,7 +158,7 @@ impl Indicator for LinearRegression {
             }
             IndicatorState::Ready => {
                 // Recalculate regression on new window
-                self.model = linear_regression(&self.window.to_vec())
+                self.model = linear_regression(&self.window.to_values())
                     .map_err(|e| TAError::InvalidData(format!("Linear regression failed: {}", e)))?;
 
                 // Fitted value at x = period - 1 (current point in window)

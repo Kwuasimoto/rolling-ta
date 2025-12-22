@@ -652,6 +652,7 @@ dependencies = [
  "calamine",
  "criterion",
  "proptest",
+ "rayon",
  "thiserror",
 ]
 
