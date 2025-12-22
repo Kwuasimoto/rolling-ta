@@ -2,12 +2,15 @@
 //!
 //! The ATR is a technical analysis indicator that measures market volatility.
 //! It is an exponentially smoothed moving average of the True Range.
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::ATRConfig,
     error::{TAError, TAResult},
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -26,25 +29,33 @@ use super::tr::TR;
 ///
 /// ```
 /// use rolling_ta::ta::volatility::{ATR, ATRConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut atr = ATR::new(ATRConfig::new(14));
-/// let data = OhlcvSeries::from_tuples(&[
-///     (0, 100.0, 105.0, 98.0, 103.0, 1000.0),
-///     (1, 103.0, 108.0, 101.0, 106.0, 1100.0),
-///     // ... more data ...
-/// ]);
-/// // Need 14+ candles for ATR to be ready
+/// let candles: Vec<Ohlcv> = (0..20).map(|i| {
+///     Ohlcv::new(i, 100.0 + i as f64, 105.0 + i as f64, 98.0 + i as f64, 103.0 + i as f64, 1000.0)
+/// }).collect();
+/// atr.calc(&candles).unwrap();
+///
+/// assert!(atr.state().is_ready());
 /// ```
 #[derive(Debug, Clone)]
 pub struct ATR {
     config: ATRConfig,
     state: IndicatorState,
-    tr: TR,
+    /// Committed ATR value (Wilder smoothed)
     atr_value: f64,
+    /// Sum of TR values during warmup
+    warmup_tr_sum: f64,
+    /// Number of TR values seen during warmup
+    warmup_count: usize,
     history: Vec<f64>,
     latest: Option<f64>,
+    /// Track last snapshot length for next() to detect new candles
+    last_len: usize,
+    /// Previous close for TR calculation
+    prev_close: f64,
 }
 
 impl ATR {
@@ -53,10 +64,13 @@ impl ATR {
         Self {
             config,
             state: IndicatorState::Uninitialized,
-            tr: TR::default(),
             atr_value: 0.0,
+            warmup_tr_sum: 0.0,
+            warmup_count: 0,
             history: Vec::new(),
             latest: None,
+            last_len: 0,
+            prev_close: 0.0,
         }
     }
 
@@ -64,12 +78,6 @@ impl ATR {
     #[inline]
     pub fn period(&self) -> usize {
         self.config.period
-    }
-
-    /// Get a reference to the internal TR indicator.
-    #[inline]
-    pub fn tr(&self) -> &TR {
-        &self.tr
     }
 }
 
@@ -87,7 +95,7 @@ impl Indicator for ATR {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
         let n = data.len();
 
@@ -102,9 +110,17 @@ impl Indicator for ATR {
             return Err(TAError::InvalidPeriod(0));
         }
 
-        // Calculate TR first
-        self.tr.calc(data)?;
-        let tr_values = self.tr.history();
+        // Calculate TR values inline
+        let mut tr_values = Vec::with_capacity(n);
+
+        // First candle: TR = High - Low
+        tr_values.push(data[0].high.0 - data[0].low.0);
+
+        // Subsequent candles
+        for i in 1..n {
+            let tr = TR::calculate_tr(data[i].high.0, data[i].low.0, data[i - 1].close.0);
+            tr_values.push(tr);
+        }
 
         // Reset ATR state
         self.history = vec![f64::NAN; n];
@@ -121,54 +137,94 @@ impl Indicator for ATR {
             self.history[i] = self.atr_value;
         }
 
+        self.prev_close = data.last().unwrap().close.0;
         self.latest = self.history.last().copied().filter(|v| !v.is_nan());
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
         let period = self.config.period;
 
-        // Update TR first
-        self.tr.update(tick)?;
-        let tr_current = self.tr.latest().unwrap_or(0.0);
-
-        // Handle initial warmup
-        if self.state.is_uninitialized() {
-            self.atr_value = tr_current; // Start accumulating
-            self.history.push(f64::NAN);
-            self.state = IndicatorState::Warming { count: 1 };
-            return Ok(None);
+        if len == 0 {
+            return None;
         }
 
-        match self.state {
-            IndicatorState::Warming { count } => {
-                // Accumulate TR values for initial SMA
-                self.atr_value += tr_current;
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
 
-                if count >= period - 1 {
-                    // Calculate initial ATR as SMA
-                    self.atr_value /= period as f64;
+        let current = candles.last().unwrap();
+        let high = current.high.0;
+        let low = current.low.0;
+        let close = current.close.0;
+
+        // Calculate TR for current candle
+        let tr = if self.last_len == 0 {
+            // Very first candle - TR is just high - low
+            high - low
+        } else if len >= 2 {
+            // Use previous candle's close from the snapshot
+            let prev_close = candles[len - 2].close.0;
+            TR::calculate_tr(high, low, prev_close)
+        } else {
+            // Single candle in snapshot but we've seen data before
+            TR::calculate_tr(high, low, self.prev_close)
+        };
+
+        // Handle warmup phase
+        if self.warmup_count < period {
+            if is_new_candle {
+                self.warmup_tr_sum += tr;
+                self.warmup_count += 1;
+                self.prev_close = close;
+                self.last_len = len;
+
+                if self.warmup_count >= period {
+                    // First valid ATR - use SMA of accumulated TR values
+                    self.atr_value = self.warmup_tr_sum / period as f64;
                     self.history.push(self.atr_value);
                     self.latest = Some(self.atr_value);
                     self.state = IndicatorState::Ready;
-                    Ok(Some(self.atr_value))
-                } else {
-                    self.history.push(f64::NAN);
-                    self.state = IndicatorState::Warming { count: count + 1 };
-                    Ok(None)
+                    return Some(self.atr_value);
                 }
+
+                self.history.push(f64::NAN);
+                self.state = IndicatorState::Warming {
+                    count: self.warmup_count,
+                };
+                return None;
+            } else {
+                // Same snapshot during warmup - no state change
+                return None;
             }
-            IndicatorState::Ready => {
-                // Wilder's smoothing
-                let p_1 = (period - 1) as f64;
-                self.atr_value = (self.atr_value * p_1 + tr_current) / period as f64;
-                self.history.push(self.atr_value);
-                self.latest = Some(self.atr_value);
-                Ok(Some(self.atr_value))
+        }
+
+        // Ready state - apply Wilder smoothing
+        let p_1 = (period - 1) as f64;
+        let p = period as f64;
+
+        if is_new_candle {
+            // Commit new state
+            self.atr_value = (self.atr_value * p_1 + tr) / p;
+            self.prev_close = close;
+            self.last_len = len;
+
+            self.history.push(self.atr_value);
+            self.latest = Some(self.atr_value);
+            Some(self.atr_value)
+        } else {
+            // Same candle - compute tentatively without committing
+            let tentative_atr = (self.atr_value * p_1 + tr) / p;
+
+            // Update history for current candle
+            if !self.history.is_empty() {
+                *self.history.last_mut().unwrap() = tentative_atr;
             }
-            IndicatorState::Uninitialized => unreachable!(),
+            self.latest = Some(tentative_atr);
+            Some(tentative_atr)
         }
     }
 
@@ -177,10 +233,13 @@ impl Indicator for ATR {
     }
 
     fn reset(&mut self) {
-        self.tr.reset();
         self.atr_value = 0.0;
+        self.warmup_tr_sum = 0.0;
+        self.warmup_count = 0;
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
+        self.prev_close = 0.0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -213,7 +272,11 @@ impl HistoricalIndicator for ATR {
 mod tests {
     use super::*;
 
-    fn generate_ohlcv_data(n: usize) -> OhlcvSeries {
+    fn create_candle(ts: i64, open: f64, high: f64, low: f64, close: f64) -> Ohlcv {
+        Ohlcv::new(ts, open, high, low, close, 1000.0)
+    }
+
+    fn generate_ohlcv_data(n: usize) -> Vec<Ohlcv> {
         let mut data = Vec::with_capacity(n);
         let mut close = 100.0;
 
@@ -223,11 +286,11 @@ mod tests {
             let low = close - volatility * 0.8;
             let new_close = close + (i as f64 * 0.3).sin() * 2.0;
 
-            data.push((i as i64, close, high, low, new_close, 1000.0 + i as f64 * 10.0));
+            data.push(create_candle(i as i64, close, high, low, new_close));
             close = new_close;
         }
 
-        OhlcvSeries::from_tuples(&data)
+        data
     }
 
     #[test]
@@ -252,18 +315,29 @@ mod tests {
     }
 
     #[test]
-    fn atr_streaming_update() {
+    fn atr_streaming_next() {
         let mut atr = ATR::new(ATRConfig::new(3));
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 103.0),
+            create_candle(1, 103.0, 108.0, 101.0, 106.0),
+            create_candle(2, 106.0, 110.0, 104.0, 109.0),
+            create_candle(3, 109.0, 112.0, 107.0, 111.0),
+        ];
 
-        // Warmup
-        assert!(atr.update(&Ohlcv::new(0, 100.0, 105.0, 98.0, 103.0, 1000.0)).unwrap().is_none());
-        assert!(atr.update(&Ohlcv::new(1, 103.0, 108.0, 101.0, 106.0, 1100.0)).unwrap().is_none());
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = atr.next(snapshot);
 
-        // Third value - should get first ATR
-        let result = atr.update(&Ohlcv::new(2, 106.0, 110.0, 104.0, 109.0, 1200.0)).unwrap();
-        assert!(result.is_some());
-        let atr_val = result.unwrap();
-        assert!(atr_val > 0.0);
+            // Should get result when we have period = 3 candles
+            if i >= 3 {
+                assert!(result.is_some(), "Should have result at len {}", i);
+                let atr_val = result.unwrap();
+                assert!(atr_val > 0.0);
+            }
+        }
+
+        assert!(atr.state().is_ready());
     }
 
     #[test]
@@ -279,23 +353,101 @@ mod tests {
     }
 
     #[test]
+    fn atr_batch_vs_streaming_equivalence() {
+        let candles = generate_ohlcv_data(30);
+        let config = ATRConfig::new(5);
+
+        // Batch
+        let mut batch = ATR::new(config);
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = ATR::new(config);
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare valid values
+        let batch_valid: Vec<_> = batch.history().iter().filter(|v| !v.is_nan()).collect();
+        let stream_valid: Vec<_> = stream.history().iter().filter(|v| !v.is_nan()).collect();
+
+        assert_eq!(
+            batch_valid.len(),
+            stream_valid.len(),
+            "batch={}, stream={}",
+            batch_valid.len(),
+            stream_valid.len()
+        );
+
+        for (i, (b, s)) in batch_valid.iter().zip(stream_valid.iter()).enumerate() {
+            assert!(
+                (*b - *s).abs() < 1e-10,
+                "ATR mismatch at {}: batch={}, stream={}",
+                i,
+                b,
+                s
+            );
+        }
+    }
+
+    #[test]
     fn atr_smoothing() {
         let mut atr = ATR::new(ATRConfig::new(5));
-        let data = generate_ohlcv_data(30);
+        let candles = generate_ohlcv_data(30);
 
-        atr.calc(&data).unwrap();
+        atr.calc(&candles).unwrap();
 
-        // ATR should be smoother than TR (less volatile)
-        let tr_values: Vec<f64> = atr.tr().history().iter().copied().collect();
+        // Calculate TR values to compare
+        let mut tr_values = Vec::with_capacity(candles.len());
+        tr_values.push(candles[0].high.0 - candles[0].low.0);
+        for i in 1..candles.len() {
+            let tr =
+                TR::calculate_tr(candles[i].high.0, candles[i].low.0, candles[i - 1].close.0);
+            tr_values.push(tr);
+        }
+
         let atr_values: Vec<f64> = atr.history().iter().copied().filter(|v| !v.is_nan()).collect();
 
         // Calculate variance of both
         let tr_mean: f64 = tr_values.iter().sum::<f64>() / tr_values.len() as f64;
         let atr_mean: f64 = atr_values.iter().sum::<f64>() / atr_values.len() as f64;
 
-        let tr_var: f64 = tr_values.iter().map(|v| (v - tr_mean).powi(2)).sum::<f64>() / tr_values.len() as f64;
-        let atr_var: f64 = atr_values.iter().map(|v| (v - atr_mean).powi(2)).sum::<f64>() / atr_values.len() as f64;
+        let tr_var: f64 =
+            tr_values.iter().map(|v| (v - tr_mean).powi(2)).sum::<f64>() / tr_values.len() as f64;
+        let atr_var: f64 = atr_values
+            .iter()
+            .map(|v| (v - atr_mean).powi(2))
+            .sum::<f64>()
+            / atr_values.len() as f64;
 
-        assert!(atr_var <= tr_var, "ATR variance ({}) should be <= TR variance ({})", atr_var, tr_var);
+        assert!(
+            atr_var <= tr_var,
+            "ATR variance ({}) should be <= TR variance ({})",
+            atr_var,
+            tr_var
+        );
+    }
+
+    #[test]
+    fn atr_reset() {
+        let mut atr = ATR::new(ATRConfig::new(5));
+        let data = generate_ohlcv_data(20);
+
+        atr.calc(&data).unwrap();
+        assert!(atr.state().is_ready());
+
+        atr.reset();
+        assert!(atr.state().is_uninitialized());
+        assert_eq!(atr.len(), 0);
+        assert!(atr.latest().is_none());
+    }
+
+    #[test]
+    fn atr_insufficient_data() {
+        let mut atr = ATR::new(ATRConfig::new(14));
+        let candles = generate_ohlcv_data(10);
+
+        let result = atr.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 }

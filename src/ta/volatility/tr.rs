@@ -4,12 +4,15 @@
 //! - Current High - Current Low
 //! - |Current High - Previous Close|
 //! - |Current Low - Previous Close|
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::TRConfig,
     error::TAResult,
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -25,15 +28,15 @@ use crate::ta::{
 ///
 /// ```
 /// use rolling_ta::ta::volatility::{TR, TRConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut tr = TR::default();
-/// let data = OhlcvSeries::from_tuples(&[
-///     (0, 100.0, 105.0, 98.0, 103.0, 1000.0),
-///     (1, 103.0, 108.0, 101.0, 106.0, 1100.0),
-/// ]);
-/// tr.calc(&data).unwrap();
+/// let candles = vec![
+///     Ohlcv::new(0, 100.0, 105.0, 98.0, 103.0, 1000.0),
+///     Ohlcv::new(1, 103.0, 108.0, 101.0, 106.0, 1100.0),
+/// ];
+/// tr.calc(&candles).unwrap();
 ///
 /// assert!(tr.state().is_ready());
 /// ```
@@ -44,6 +47,8 @@ pub struct TR {
     prev_close: f64,
     history: Vec<f64>,
     latest: Option<f64>,
+    /// Track last snapshot length for next() to detect new candles
+    last_len: usize,
 }
 
 impl TR {
@@ -55,6 +60,7 @@ impl TR {
             prev_close: 0.0,
             history: Vec::new(),
             latest: None,
+            last_len: 0,
         }
     }
 
@@ -94,7 +100,7 @@ impl Indicator for TR {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let n = data.len();
         if n == 0 {
             self.history.clear();
@@ -105,48 +111,64 @@ impl Indicator for TR {
         // Reset state
         self.history = Vec::with_capacity(n);
 
-        let highs = &data.highs;
-        let lows = &data.lows;
-        let closes = &data.closes;
-
         // First candle: TR = High - Low (no previous close)
-        self.history.push(highs[0] - lows[0]);
+        self.history.push(data[0].high.0 - data[0].low.0);
 
         // Subsequent candles
         for i in 1..n {
-            let tr = Self::calculate_tr(highs[i], lows[i], closes[i - 1]);
+            let tr = Self::calculate_tr(data[i].high.0, data[i].low.0, data[i - 1].close.0);
             self.history.push(tr);
         }
 
-        self.prev_close = *closes.last().unwrap();
+        self.prev_close = data.last().unwrap().close.0;
         self.latest = self.history.last().copied();
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let high = tick.high.0;
-        let low = tick.low.0;
-        let close = tick.close.0;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
 
-        if self.state.is_uninitialized() {
-            // First tick - TR is just high - low
-            let tr = high - low;
-            self.history.push(tr);
-            self.latest = Some(tr);
-            self.prev_close = close;
-            self.state = IndicatorState::Ready;
-            return Ok(Some(tr));
+        if len == 0 {
+            return None;
         }
 
-        // Calculate TR using previous close
-        let tr = Self::calculate_tr(high, low, self.prev_close);
-        self.history.push(tr);
-        self.latest = Some(tr);
-        self.prev_close = close;
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
 
-        Ok(Some(tr))
+        let current = candles.last().unwrap();
+        let high = current.high.0;
+        let low = current.low.0;
+        let close = current.close.0;
+
+        let tr = if self.last_len == 0 {
+            // Very first candle - TR is just high - low
+            high - low
+        } else if len >= 2 {
+            // Use previous candle's close from the snapshot
+            let prev_close = candles[len - 2].close.0;
+            Self::calculate_tr(high, low, prev_close)
+        } else {
+            // Single candle in snapshot but we've seen data before
+            // Use stored prev_close
+            Self::calculate_tr(high, low, self.prev_close)
+        };
+
+        if is_new_candle {
+            self.history.push(tr);
+            self.prev_close = close;
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            // Same candle - update last value
+            *self.history.last_mut().unwrap() = tr;
+        }
+
+        self.latest = Some(tr);
+        self.state = IndicatorState::Ready;
+
+        Some(tr)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -157,6 +179,7 @@ impl Indicator for TR {
         self.prev_close = 0.0;
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -189,16 +212,20 @@ impl HistoricalIndicator for TR {
 mod tests {
     use super::*;
 
+    fn create_candle(ts: i64, open: f64, high: f64, low: f64, close: f64) -> Ohlcv {
+        Ohlcv::new(ts, open, high, low, close, 1000.0)
+    }
+
     #[test]
     fn tr_basic_calculation() {
         let mut tr = TR::default();
-        let data = OhlcvSeries::from_tuples(&[
-            (0, 100.0, 105.0, 98.0, 103.0, 1000.0),
-            (1, 103.0, 108.0, 101.0, 106.0, 1100.0),
-            (2, 106.0, 110.0, 104.0, 109.0, 1200.0),
-        ]);
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 103.0),
+            create_candle(1, 103.0, 108.0, 101.0, 106.0),
+            create_candle(2, 106.0, 110.0, 104.0, 109.0),
+        ];
 
-        tr.calc(&data).unwrap();
+        tr.calc(&candles).unwrap();
 
         assert!(tr.state().is_ready());
         assert_eq!(tr.len(), 3);
@@ -216,12 +243,12 @@ mod tests {
     #[test]
     fn tr_gap_up() {
         let mut tr = TR::default();
-        let data = OhlcvSeries::from_tuples(&[
-            (0, 100.0, 105.0, 98.0, 100.0, 1000.0),
-            (1, 110.0, 115.0, 108.0, 112.0, 1100.0), // Gap up from 100 to 110
-        ]);
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 100.0),
+            create_candle(1, 110.0, 115.0, 108.0, 112.0), // Gap up from 100 to 110
+        ];
 
-        tr.calc(&data).unwrap();
+        tr.calc(&candles).unwrap();
 
         // Second candle TR should capture the gap
         // max(115-108, |115-100|, |108-100|) = max(7, 15, 8) = 15
@@ -229,28 +256,93 @@ mod tests {
     }
 
     #[test]
-    fn tr_streaming_update() {
+    fn tr_streaming_next() {
         let mut tr = TR::default();
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 103.0),
+            create_candle(1, 103.0, 108.0, 101.0, 106.0),
+            create_candle(2, 106.0, 110.0, 104.0, 109.0),
+        ];
 
-        // First tick
-        let result = tr.update(&Ohlcv::new(0, 100.0, 105.0, 98.0, 103.0, 1000.0)).unwrap();
-        assert_eq!(result, Some(7.0)); // 105 - 98
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = tr.next(snapshot);
+            assert!(result.is_some(), "TR should always produce value");
+        }
 
-        // Second tick
-        let result = tr.update(&Ohlcv::new(1, 103.0, 108.0, 101.0, 106.0, 1100.0)).unwrap();
-        assert_eq!(result, Some(7.0)); // max(7, 5, 2)
+        assert!(tr.state().is_ready());
+        assert_eq!(tr.len(), 3);
+
+        // Values should match batch
+        assert_eq!(tr.get(0).unwrap(), 7.0);
+        assert_eq!(tr.get(1).unwrap(), 7.0);
+        assert_eq!(tr.get(2).unwrap(), 6.0);
+    }
+
+    #[test]
+    fn tr_batch_vs_streaming_equivalence() {
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 103.0),
+            create_candle(1, 103.0, 108.0, 101.0, 106.0),
+            create_candle(2, 106.0, 110.0, 104.0, 109.0),
+            create_candle(3, 109.0, 112.0, 107.0, 111.0),
+            create_candle(4, 111.0, 115.0, 109.0, 113.0),
+        ];
+
+        // Batch
+        let mut batch = TR::default();
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = TR::default();
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        assert_eq!(batch.len(), stream.len());
+        for i in 0..batch.len() {
+            assert!(
+                (batch.get(i as isize).unwrap() - stream.get(i as isize).unwrap()).abs() < 1e-10,
+                "TR mismatch at {}: batch={}, stream={}",
+                i,
+                batch.get(i as isize).unwrap(),
+                stream.get(i as isize).unwrap()
+            );
+        }
     }
 
     #[test]
     fn tr_always_positive() {
         let mut tr = TR::default();
-        let closes: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.5).sin() * 10.0).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles: Vec<Ohlcv> = (0..50)
+            .map(|i| {
+                let base = 100.0 + (i as f64 * 0.5).sin() * 10.0;
+                create_candle(i, base, base + 2.0, base - 1.0, base + 0.5)
+            })
+            .collect();
 
-        tr.calc(&data).unwrap();
+        tr.calc(&candles).unwrap();
 
         for val in tr.history() {
             assert!(*val >= 0.0, "TR should always be >= 0, got {}", val);
         }
+    }
+
+    #[test]
+    fn tr_reset() {
+        let mut tr = TR::default();
+        let candles = vec![
+            create_candle(0, 100.0, 105.0, 98.0, 103.0),
+            create_candle(1, 103.0, 108.0, 101.0, 106.0),
+        ];
+
+        tr.calc(&candles).unwrap();
+        assert!(tr.state().is_ready());
+
+        tr.reset();
+        assert!(tr.state().is_uninitialized());
+        assert_eq!(tr.len(), 0);
+        assert!(tr.latest().is_none());
     }
 }

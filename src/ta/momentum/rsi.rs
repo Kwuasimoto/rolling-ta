@@ -2,12 +2,15 @@
 //!
 //! The RSI is a momentum oscillator that measures the speed and change of price
 //! movements. It oscillates between 0 and 100.
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::RSIConfig,
     error::{TAError, TAResult},
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -24,15 +27,12 @@ use crate::ta::{
 ///
 /// ```
 /// use rolling_ta::ta::momentum::{RSI, RSIConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut rsi = RSI::new(RSIConfig::new(14));
-/// let data = OhlcvSeries::from_closes(&[
-///     44.0, 44.5, 43.5, 44.0, 44.5, 43.0, 43.5, 44.0, 44.5, 43.5,
-///     44.0, 44.5, 45.0, 44.5, 45.0, 45.5,
-/// ]);
-/// rsi.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = (0..20).map(|i| Ohlcv::from_close(100.0 + i as f64)).collect();
+/// rsi.calc(&candles).unwrap();
 ///
 /// assert!(rsi.state().is_ready());
 /// ```
@@ -40,11 +40,22 @@ use crate::ta::{
 pub struct RSI {
     config: RSIConfig,
     state: IndicatorState,
+    /// Committed average gain (Wilder smoothed)
     avg_gain: f64,
+    /// Committed average loss (Wilder smoothed)
     avg_loss: f64,
+    /// Previous close for delta calculation
     prev_close: f64,
+    /// Sum of gains during warmup (before first RSI)
+    warmup_gain_sum: f64,
+    /// Sum of losses during warmup
+    warmup_loss_sum: f64,
+    /// Number of deltas seen during warmup
+    warmup_count: usize,
     history: Vec<f64>,
     latest: Option<f64>,
+    /// Track last snapshot length for next() to detect new candles
+    last_len: usize,
 }
 
 impl RSI {
@@ -56,8 +67,12 @@ impl RSI {
             avg_gain: 0.0,
             avg_loss: 0.0,
             prev_close: 0.0,
+            warmup_gain_sum: 0.0,
+            warmup_loss_sum: 0.0,
+            warmup_count: 0,
             history: Vec::new(),
             latest: None,
+            last_len: 0,
         }
     }
 
@@ -92,7 +107,7 @@ impl Indicator for RSI {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
         let n = data.len();
 
@@ -110,14 +125,13 @@ impl Indicator for RSI {
 
         // Reset state
         self.history = vec![f64::NAN; n];
-        let closes = &data.closes;
 
         // Calculate gains and losses
         let mut gains = vec![0.0; n];
         let mut losses = vec![0.0; n];
 
         for i in 1..n {
-            let delta = closes[i] - closes[i - 1];
+            let delta = data[i].close.0 - data[i - 1].close.0;
             if delta > 0.0 {
                 gains[i] = delta;
             } else if delta < 0.0 {
@@ -141,66 +155,106 @@ impl Indicator for RSI {
 
         self.avg_gain = avg_gain;
         self.avg_loss = avg_loss;
-        self.prev_close = *closes.last().unwrap();
+        self.prev_close = data.last().unwrap().close.0;
         self.latest = self.history.last().copied().filter(|v| !v.is_nan());
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let close = tick.close.0;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
         let period = self.config.period;
 
-        // Handle initial warmup via streaming
-        if self.state.is_uninitialized() {
-            // First tick - just store the close
-            self.prev_close = close;
-            self.history.push(f64::NAN);
-            self.state = IndicatorState::Warming { count: 1 };
-            return Ok(None);
+        if len == 0 {
+            return None;
         }
 
-        let delta = close - self.prev_close;
-        let gain = delta.max(0.0);
-        let loss = (-delta).max(0.0);
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
 
-        match self.state {
-            IndicatorState::Warming { count } => {
-                // During warmup, accumulate gains/losses
-                self.avg_gain += gain;
-                self.avg_loss += loss;
+        let current_close = candles.last().unwrap().close.0;
 
-                if count >= period {
-                    // Enough data - finalize SMA and produce first RSI
-                    self.avg_gain /= period as f64;
-                    self.avg_loss /= period as f64;
+        // Handle warmup phase
+        // warmup_count tracks number of deltas accumulated (not candles)
+        // We need `period` deltas, which requires period + 1 candles
+        if self.warmup_count < period {
+            if is_new_candle {
+                // Check if this is the very first candle we've seen
+                if self.last_len == 0 {
+                    // First candle - just store close, need second for first delta
+                    self.prev_close = current_close;
+                    self.last_len = len;
+                    self.history.push(f64::NAN);
+                    self.state = IndicatorState::Warming { count: 1 };
+                    return None;
+                }
+
+                // Compute delta from previous close
+                let delta = current_close - self.prev_close;
+                let gain = delta.max(0.0);
+                let loss = (-delta).max(0.0);
+
+                self.warmup_gain_sum += gain;
+                self.warmup_loss_sum += loss;
+                self.warmup_count += 1;
+                self.prev_close = current_close;
+                self.last_len = len;
+
+                if self.warmup_count >= period {
+                    // First valid RSI - use SMA of accumulated gains/losses
+                    self.avg_gain = self.warmup_gain_sum / period as f64;
+                    self.avg_loss = self.warmup_loss_sum / period as f64;
                     let rsi = Self::calculate_rsi(self.avg_gain, self.avg_loss);
                     self.history.push(rsi);
                     self.latest = Some(rsi);
-                    self.prev_close = close;
                     self.state = IndicatorState::Ready;
-                    Ok(Some(rsi))
-                } else {
-                    self.history.push(f64::NAN);
-                    self.prev_close = close;
-                    self.state = IndicatorState::Warming { count: count + 1 };
-                    Ok(None)
+                    return Some(rsi);
                 }
-            }
-            IndicatorState::Ready => {
-                // Wilder's smoothing
-                let p_1 = (period - 1) as f64;
-                self.avg_gain = (self.avg_gain * p_1 + gain) / period as f64;
-                self.avg_loss = (self.avg_loss * p_1 + loss) / period as f64;
 
-                let rsi = Self::calculate_rsi(self.avg_gain, self.avg_loss);
-                self.history.push(rsi);
-                self.latest = Some(rsi);
-                self.prev_close = close;
-                Ok(Some(rsi))
+                self.history.push(f64::NAN);
+                self.state = IndicatorState::Warming {
+                    count: self.warmup_count + 1, // +1 for display (candles seen)
+                };
+                return None;
+            } else {
+                // Same snapshot during warmup - no state change
+                return None;
             }
-            IndicatorState::Uninitialized => unreachable!(),
+        }
+
+        // Ready state - apply Wilder smoothing
+        let delta = current_close - self.prev_close;
+        let gain = delta.max(0.0);
+        let loss = (-delta).max(0.0);
+
+        let p_1 = (period - 1) as f64;
+        let p = period as f64;
+
+        if is_new_candle {
+            // Commit new state
+            self.avg_gain = (self.avg_gain * p_1 + gain) / p;
+            self.avg_loss = (self.avg_loss * p_1 + loss) / p;
+            self.prev_close = current_close;
+            self.last_len = len;
+
+            let rsi = Self::calculate_rsi(self.avg_gain, self.avg_loss);
+            self.history.push(rsi);
+            self.latest = Some(rsi);
+            Some(rsi)
+        } else {
+            // Same candle - compute tentatively without committing
+            let tentative_gain = (self.avg_gain * p_1 + gain) / p;
+            let tentative_loss = (self.avg_loss * p_1 + loss) / p;
+            let rsi = Self::calculate_rsi(tentative_gain, tentative_loss);
+
+            // Update history for current candle
+            if !self.history.is_empty() {
+                *self.history.last_mut().unwrap() = rsi;
+            }
+            self.latest = Some(rsi);
+            Some(rsi)
         }
     }
 
@@ -212,8 +266,12 @@ impl Indicator for RSI {
         self.avg_gain = 0.0;
         self.avg_loss = 0.0;
         self.prev_close = 0.0;
+        self.warmup_gain_sum = 0.0;
+        self.warmup_loss_sum = 0.0;
+        self.warmup_count = 0;
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -246,14 +304,22 @@ impl HistoricalIndicator for RSI {
 mod tests {
     use super::*;
 
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 0.0))
+            .collect()
+    }
+
     #[test]
     fn rsi_batch_calculation() {
         let mut rsi = RSI::new(RSIConfig::new(14));
         // Simple up/down pattern
         let closes: Vec<f64> = (0..30).map(|i| 100.0 + (i % 3) as f64).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        rsi.calc(&data).unwrap();
+        rsi.calc(&candles).unwrap();
 
         assert!(rsi.state().is_ready());
         assert_eq!(rsi.len(), 30);
@@ -270,28 +336,34 @@ mod tests {
     }
 
     #[test]
-    fn rsi_streaming_update() {
+    fn rsi_streaming_next() {
         let mut rsi = RSI::new(RSIConfig::new(3));
+        let closes = [100.0, 101.0, 102.0, 101.0, 102.0, 103.0];
+        let candles = candles_from_closes(&closes);
 
-        // Warmup
-        assert!(rsi.update(&Ohlcv::from_close(100.0)).unwrap().is_none());
-        assert!(rsi.update(&Ohlcv::from_close(101.0)).unwrap().is_none());
-        assert!(rsi.update(&Ohlcv::from_close(102.0)).unwrap().is_none());
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = rsi.next(snapshot);
 
-        // Fourth value - should get first RSI
-        let result = rsi.update(&Ohlcv::from_close(101.0)).unwrap();
-        assert!(result.is_some());
-        let rsi_val = result.unwrap();
-        assert!(rsi_val >= 0.0 && rsi_val <= 100.0);
+            // Should get result when we have period + 1 = 4 candles
+            if i >= 4 {
+                assert!(result.is_some(), "Should have result at len {}", i);
+                let rsi_val = result.unwrap();
+                assert!(rsi_val >= 0.0 && rsi_val <= 100.0);
+            }
+        }
+
+        assert!(rsi.state().is_ready());
     }
 
     #[test]
     fn rsi_always_in_range() {
         let mut rsi = RSI::new(RSIConfig::new(5));
         let closes: Vec<f64> = (0..50).map(|i| 100.0 + (i as f64 * 0.5).sin() * 10.0).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        rsi.calc(&data).unwrap();
+        rsi.calc(&candles).unwrap();
 
         for val in rsi.history().iter().filter(|v| !v.is_nan()) {
             assert!(*val >= 0.0, "RSI {} below 0", val);
@@ -304,9 +376,9 @@ mod tests {
         let mut rsi = RSI::new(RSIConfig::new(5));
         // Strong uptrend
         let closes: Vec<f64> = (0..20).map(|i| 100.0 + i as f64).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        rsi.calc(&data).unwrap();
+        rsi.calc(&candles).unwrap();
 
         let latest = rsi.latest().unwrap();
         // Should be very high (above 80) in strong uptrend
@@ -318,9 +390,9 @@ mod tests {
         let mut rsi = RSI::new(RSIConfig::new(5));
         // Strong downtrend
         let closes: Vec<f64> = (0..20).map(|i| 120.0 - i as f64).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        rsi.calc(&data).unwrap();
+        rsi.calc(&candles).unwrap();
 
         let latest = rsi.latest().unwrap();
         // Should be very low (below 20) in strong downtrend
@@ -332,12 +404,79 @@ mod tests {
         let mut rsi = RSI::new(RSIConfig::new(5));
         // Flat market
         let closes = vec![100.0; 20];
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        rsi.calc(&data).unwrap();
+        rsi.calc(&candles).unwrap();
 
         let latest = rsi.latest().unwrap();
         // Should be around 50 in flat market
-        assert!((latest - 50.0).abs() < 1.0, "RSI in flat market should be ~50, got {}", latest);
+        assert!(
+            (latest - 50.0).abs() < 1.0,
+            "RSI in flat market should be ~50, got {}",
+            latest
+        );
+    }
+
+    #[test]
+    fn rsi_batch_vs_streaming_equivalence() {
+        let closes: Vec<f64> = (0..30).map(|i| 100.0 + (i as f64 * 0.3).sin() * 5.0).collect();
+        let candles = candles_from_closes(&closes);
+        let config = RSIConfig::new(5);
+
+        // Batch
+        let mut batch = RSI::new(config);
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = RSI::new(config);
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare valid values
+        let batch_valid: Vec<_> = batch.history().iter().filter(|v| !v.is_nan()).collect();
+        let stream_valid: Vec<_> = stream.history().iter().filter(|v| !v.is_nan()).collect();
+
+        assert_eq!(
+            batch_valid.len(),
+            stream_valid.len(),
+            "batch={}, stream={}",
+            batch_valid.len(),
+            stream_valid.len()
+        );
+
+        for (i, (b, s)) in batch_valid.iter().zip(stream_valid.iter()).enumerate() {
+            assert!(
+                (*b - *s).abs() < 1e-10,
+                "RSI mismatch at {}: batch={}, stream={}",
+                i,
+                b,
+                s
+            );
+        }
+    }
+
+    #[test]
+    fn rsi_reset() {
+        let mut rsi = RSI::new(RSIConfig::new(5));
+        let closes: Vec<f64> = (0..20).map(|i| 100.0 + i as f64).collect();
+        let candles = candles_from_closes(&closes);
+
+        rsi.calc(&candles).unwrap();
+        assert!(rsi.state().is_ready());
+
+        rsi.reset();
+        assert!(rsi.state().is_uninitialized());
+        assert_eq!(rsi.len(), 0);
+        assert!(rsi.latest().is_none());
+    }
+
+    #[test]
+    fn rsi_insufficient_data() {
+        let mut rsi = RSI::new(RSIConfig::new(14));
+        let candles = candles_from_closes(&[100.0; 10]);
+
+        let result = rsi.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 }

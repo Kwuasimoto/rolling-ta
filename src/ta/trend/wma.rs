@@ -1,19 +1,18 @@
 //! Weighted Moving Average (WMA) indicator.
 
-use std::collections::VecDeque;
-
 use crate::ta::{
     config::WMAConfig,
     error::{TAError, TAResult},
-    math::Temporal,
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
-    Indicator, HistoricalIndicator,
+    types::Ohlcv,
+    HistoricalIndicator, Indicator,
 };
 
 /// Weighted Moving Average indicator.
 ///
 /// Assigns linearly increasing weights to more recent prices.
+/// This indicator computes directly from `&[Ohlcv]` slices, making it suitable for
+/// SharedWindow architecture and parallel computation with Rayon.
 ///
 /// # Formula
 ///
@@ -23,12 +22,18 @@ use crate::ta::{
 ///
 /// ```
 /// use rolling_ta::ta::trend::{WMA, WMAConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut wma = WMA::new(WMAConfig::new(3));
-/// let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-/// wma.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = vec![
+///     Ohlcv::from_close(1.0),
+///     Ohlcv::from_close(2.0),
+///     Ohlcv::from_close(3.0),
+///     Ohlcv::from_close(4.0),
+///     Ohlcv::from_close(5.0),
+/// ];
+/// wma.calc(&candles).unwrap();
 ///
 /// assert!(wma.state().is_ready());
 /// ```
@@ -37,31 +42,24 @@ pub struct WMA {
     config: WMAConfig,
     state: IndicatorState,
     weight_sum: usize,
-    window: VecDeque<f64>,
     history: Vec<f64>,
     latest: Option<f64>,
-    /// Temporal state for candle period detection.
-    temporal: Temporal,
+    /// Track last snapshot length for next() to detect new candles.
+    last_len: usize,
 }
 
 impl WMA {
     /// Create a new WMA indicator with the given configuration.
     pub fn new(config: WMAConfig) -> Self {
         let weight_sum = config.weight_sum();
-        let temporal = if config.timeframe > 0 {
-            Temporal::new(config.timeframe)
-        } else {
-            Temporal::disabled()
-        };
 
         Self {
             config,
             state: IndicatorState::Uninitialized,
             weight_sum,
-            window: VecDeque::with_capacity(config.period),
             history: Vec::new(),
             latest: None,
-            temporal,
+            last_len: 0,
         }
     }
 
@@ -71,25 +69,21 @@ impl WMA {
         self.config.period
     }
 
-    /// Get the timeframe (0 = temporal mode disabled).
+    /// Get the weight sum.
     #[inline]
-    pub fn timeframe(&self) -> i64 {
-        self.config.timeframe
+    pub fn weight_sum(&self) -> usize {
+        self.weight_sum
     }
 
-    /// Check if temporal mode is enabled.
+    /// Calculate WMA from the last N candles in a slice.
     #[inline]
-    pub fn is_temporal(&self) -> bool {
-        self.config.timeframe > 0
-    }
-
-    /// Calculate WMA from current window.
-    fn calculate_wma(&self) -> f64 {
+    fn compute_wma(candles: &[Ohlcv], period: usize, weight_sum: usize) -> f64 {
+        let start = candles.len().saturating_sub(period);
         let mut weighted_sum = 0.0;
-        for (i, &price) in self.window.iter().enumerate() {
-            weighted_sum += price * (i + 1) as f64;
+        for (i, candle) in candles[start..].iter().enumerate() {
+            weighted_sum += candle.close.0 * (i + 1) as f64;
         }
-        weighted_sum / self.weight_sum as f64
+        weighted_sum / weight_sum as f64
     }
 }
 
@@ -107,7 +101,7 @@ impl Indicator for WMA {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
 
         if data.len() < period {
@@ -122,81 +116,61 @@ impl Indicator for WMA {
         }
 
         // Reset state
-        self.window = VecDeque::with_capacity(period);
         self.history = Vec::with_capacity(data.len());
 
-        let closes = &data.closes;
-
-        // Fill initial window
-        for i in 0..period {
-            self.window.push_back(closes[i]);
+        // Fill NaN for warmup period
+        for _ in 0..(period - 1) {
             self.history.push(f64::NAN);
         }
 
-        // First WMA
-        let first_wma = self.calculate_wma();
-        self.history[period - 1] = first_wma;
-
-        // Rolling calculation
-        for i in period..closes.len() {
-            self.window.pop_front();
-            self.window.push_back(closes[i]);
-            let wma = self.calculate_wma();
+        // Calculate WMA for each position
+        for i in (period - 1)..data.len() {
+            let window = &data[i + 1 - period..=i];
+            let mut weighted_sum = 0.0;
+            for (j, candle) in window.iter().enumerate() {
+                weighted_sum += candle.close.0 * (j + 1) as f64;
+            }
+            let wma = weighted_sum / self.weight_sum as f64;
             self.history.push(wma);
         }
 
         self.latest = self.history.last().copied();
+        self.last_len = data.len();
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let close = tick.close.0;
-        let timestamp = tick.timestamp.0;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
         let period = self.config.period;
+        let len = candles.len();
 
-        // Check if this is a same-candle update (temporal mode)
-        let is_same_period = self.temporal.is_same_period(timestamp);
-
-        if is_same_period {
-            // Same candle period - update the back of the window in place
-            if let Some(back) = self.window.back_mut() {
-                *back = close;
-            }
-
-            if self.state.is_ready() {
-                let wma = self.calculate_wma();
-                // Update last history entry in place
-                if let Some(last) = self.history.last_mut() {
-                    *last = wma;
-                }
-                self.latest = Some(wma);
-                Ok(Some(wma))
-            } else {
-                Ok(None)
-            }
-        } else {
-            // New candle period - normal update path
-            self.temporal.record(timestamp);
-
-            if self.window.len() >= period {
-                self.window.pop_front();
-            }
-            self.window.push_back(close);
-
+        if len < period {
+            // Not enough data - still warming up
             self.state = self.state.increment(period);
-
-            if self.state.is_ready() {
-                let wma = self.calculate_wma();
-                self.history.push(wma);
-                self.latest = Some(wma);
-                Ok(Some(wma))
-            } else {
-                self.history.push(f64::NAN);
-                Ok(None)
-            }
+            return None;
         }
+
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
+
+        // Calculate WMA from last N candles
+        let wma = Self::compute_wma(candles, period, self.weight_sum);
+
+        // Update state
+        self.latest = Some(wma);
+        self.state = IndicatorState::Ready;
+
+        // Only push to history if this is a new candle
+        if is_new_candle {
+            self.history.push(wma);
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            // Update last history entry in place
+            *self.history.last_mut().unwrap() = wma;
+        }
+
+        Some(wma)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -204,11 +178,10 @@ impl Indicator for WMA {
     }
 
     fn reset(&mut self) {
-        self.window.clear();
+        self.state = IndicatorState::Uninitialized;
         self.history.clear();
         self.latest = None;
-        self.state = IndicatorState::Uninitialized;
-        self.temporal.reset();
+        self.last_len = 0;
     }
 
     fn warmup_period(&self) -> usize {
@@ -241,12 +214,21 @@ impl HistoricalIndicator for WMA {
 mod tests {
     use super::*;
 
+    /// Helper to build candles from close prices.
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 0.0))
+            .collect()
+    }
+
     #[test]
     fn wma_batch_calculation() {
         let mut wma = WMA::new(WMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        wma.calc(&data).unwrap();
+        wma.calc(&candles).unwrap();
 
         assert!(wma.state().is_ready());
         assert_eq!(wma.len(), 5);
@@ -267,141 +249,133 @@ mod tests {
     }
 
     #[test]
-    fn wma_streaming_update() {
+    fn wma_streaming_next() {
         let mut wma = WMA::new(WMAConfig::new(3));
 
-        // Warmup
-        assert!(wma.update(&Ohlcv::from_close(1.0)).unwrap().is_none());
-        assert!(wma.update(&Ohlcv::from_close(2.0)).unwrap().is_none());
+        // Warmup - not enough candles
+        let snap1 = candles_from_closes(&[1.0]);
+        assert!(wma.next(&snap1).is_none());
 
-        // Third value - should get first WMA
-        let result = wma.update(&Ohlcv::from_close(3.0)).unwrap();
+        let snap2 = candles_from_closes(&[1.0, 2.0]);
+        assert!(wma.next(&snap2).is_none());
+
+        // Now should be ready - first WMA
+        let snap3 = candles_from_closes(&[1.0, 2.0, 3.0]);
+        let result = wma.next(&snap3);
         assert!(result.is_some());
+        // WMA = (1×1 + 2×2 + 3×3) / 6 = 14/6 ≈ 2.333
         assert!((result.unwrap() - 2.333).abs() < 0.01);
 
-        // Fourth value
-        let result = wma.update(&Ohlcv::from_close(4.0)).unwrap();
+        // Continue streaming
+        let snap4 = candles_from_closes(&[1.0, 2.0, 3.0, 4.0]);
+        let result = wma.next(&snap4);
+        // WMA = (2×1 + 3×2 + 4×3) / 6 = 20/6 ≈ 3.333
         assert!((result.unwrap() - 3.333).abs() < 0.01);
     }
 
     #[test]
-    fn wma_weight_sum() {
+    fn wma_weight_sum_calculation() {
         let wma = WMA::new(WMAConfig::new(5));
         // 1+2+3+4+5 = 15
-        assert_eq!(wma.weight_sum, 15);
-    }
-
-    // Temporal tests
-
-    #[test]
-    fn wma_temporal_config() {
-        // Non-temporal (default)
-        let wma = WMA::new(WMAConfig::new(14));
-        assert!(!wma.is_temporal());
-        assert_eq!(wma.timeframe(), 0);
-
-        // Temporal mode
-        let wma = WMA::new(WMAConfig::with_timeframe(14, 60));
-        assert!(wma.is_temporal());
-        assert_eq!(wma.timeframe(), 60);
+        assert_eq!(wma.weight_sum(), 15);
     }
 
     #[test]
-    fn wma_temporal_same_period_updates_in_place() {
-        // 1-minute timeframe (60 seconds), period 3
-        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 60));
-
-        // Warmup with different candle periods
-        // Period 16: timestamp 960
-        wma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        assert_eq!(wma.len(), 1);
-
-        // Period 17: timestamp 1020
-        wma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(wma.len(), 2);
-
-        // Period 18: timestamp 1080 - this should be ready
-        // WMA = (1×1 + 2×2 + 3×3) / 6 = 14/6 ≈ 2.333
-        let result = wma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 2.333).abs() < 0.01);
-        assert_eq!(wma.len(), 3);
-
-        // Same period (still 18): timestamp 1100 - should update in place
-        // Window is now [1, 2, 6], WMA = (1×1 + 2×2 + 6×3) / 6 = 23/6 ≈ 3.833
-        let result = wma.update(&Ohlcv::new(1100, 6.0, 6.0, 6.0, 6.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 3.833).abs() < 0.01);
-        assert_eq!(wma.len(), 3); // Still 3, not 4!
-
-        // Same period again: timestamp 1110 - should update in place again
-        // Window is now [1, 2, 9], WMA = (1×1 + 2×2 + 9×3) / 6 = 32/6 ≈ 5.333
-        let result = wma.update(&Ohlcv::new(1110, 9.0, 9.0, 9.0, 9.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 5.333).abs() < 0.01);
-        assert_eq!(wma.len(), 3); // Still 3!
-    }
-
-    #[test]
-    fn wma_temporal_new_period_pushes() {
-        // 5-minute timeframe (300 seconds)
-        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 300));
-
-        // Period 3: timestamps 900-1199
-        wma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        wma.update(&Ohlcv::new(1100, 1.5, 1.5, 1.5, 1.5, 0.0)).unwrap(); // Same period, updates
-        assert_eq!(wma.len(), 1);
-
-        // Period 4: timestamps 1200-1499
-        wma.update(&Ohlcv::new(1200, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(wma.len(), 2);
-
-        // Period 5: timestamps 1500-1799 - should be ready
-        // Window: [1.5, 2.0, 3.0], WMA = (1.5×1 + 2.0×2 + 3.0×3) / 6 = 14.5/6 ≈ 2.417
-        let result = wma.update(&Ohlcv::new(1500, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 2.417).abs() < 0.01);
-        assert_eq!(wma.len(), 3);
-
-        // Period 6: timestamp 1800 - new period
-        // Window: [2.0, 3.0, 4.0], WMA = (2×1 + 3×2 + 4×3) / 6 = 20/6 ≈ 3.333
-        let result = wma.update(&Ohlcv::new(1800, 4.0, 4.0, 4.0, 4.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 3.333).abs() < 0.01);
-        assert_eq!(wma.len(), 4);
-    }
-
-    #[test]
-    fn wma_non_temporal_always_pushes() {
-        // Non-temporal mode (timeframe = 0)
+    fn wma_reset() {
         let mut wma = WMA::new(WMAConfig::new(3));
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        wma.calc(&candles).unwrap();
 
-        // All at same timestamp - should still push each one
-        wma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        wma.update(&Ohlcv::new(1000, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        wma.update(&Ohlcv::new(1000, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-
-        assert_eq!(wma.len(), 3);
         assert!(wma.state().is_ready());
-    }
-
-    #[test]
-    fn wma_temporal_reset_preserves_config() {
-        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 60));
-
-        // Add some data
-        wma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        wma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        wma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-
-        assert!(wma.is_temporal());
-        assert_eq!(wma.timeframe(), 60);
 
         wma.reset();
 
-        // Temporal config should be preserved
-        assert!(wma.is_temporal());
-        assert_eq!(wma.timeframe(), 60);
         assert!(wma.state().is_uninitialized());
+        assert!(wma.history.is_empty());
+        assert!(wma.latest().is_none());
+    }
+
+    #[test]
+    fn wma_negative_indexing() {
+        let mut wma = WMA::new(WMAConfig::new(3));
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        wma.calc(&candles).unwrap();
+
+        // -1 should be last value (4.333)
+        assert!((wma.get(-1).unwrap() - 4.333).abs() < 0.01);
+        // -2 should be second to last (3.333)
+        assert!((wma.get(-2).unwrap() - 3.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn wma_insufficient_data() {
+        let mut wma = WMA::new(WMAConfig::new(10));
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0]);
+
+        let result = wma.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
+    }
+
+    #[test]
+    fn wma_next_uses_last_n_candles() {
+        let mut wma = WMA::new(WMAConfig::new(3));
+
+        // Large snapshot, WMA should use last 3 candles
+        let candles = candles_from_closes(&[100.0, 200.0, 1.0, 2.0, 3.0]);
+
+        // WMA of last 3: (1×1 + 2×2 + 3×3) / 6 = 14/6 ≈ 2.333
+        let result = wma.next(&candles);
+        assert!(result.is_some());
+        assert!((result.unwrap() - 2.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn wma_parallel_safe() {
+        use std::sync::Arc;
+
+        let candles = Arc::new(candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]));
+
+        let mut wma1 = WMA::new(WMAConfig::new(3));
+        let mut wma2 = WMA::new(WMAConfig::new(3));
+
+        // Both can read from the same snapshot
+        let snapshot: &[Ohlcv] = &candles;
+        let r1 = wma1.next(snapshot);
+        let r2 = wma2.next(snapshot);
+
+        assert_eq!(r1, r2);
+        // WMA of last 3: (3×1 + 4×2 + 5×3) / 6 = 26/6 ≈ 4.333
+        assert!((r1.unwrap() - 4.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn wma_batch_vs_streaming_equivalence() {
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        let period = 3;
+
+        // Batch
+        let mut batch = WMA::new(WMAConfig::new(period));
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = WMA::new(WMAConfig::new(period));
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare computed values (skip NaN)
+        let batch_computed: Vec<f64> = batch.history().iter().filter(|v| !v.is_nan()).copied().collect();
+        let stream_computed = stream.history();
+
+        assert_eq!(batch_computed.len(), stream_computed.len());
+
+        for (b, s) in batch_computed.iter().zip(stream_computed.iter()) {
+            assert!(
+                (b - s).abs() < 1e-10,
+                "Mismatch: batch={}, stream={}",
+                b,
+                s
+            );
+        }
     }
 }

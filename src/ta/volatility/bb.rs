@@ -2,15 +2,15 @@
 //!
 //! Bollinger Bands consist of a middle band (SMA) and two outer bands
 //! based on standard deviation, used to identify volatility.
-
-use std::collections::VecDeque;
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::BBConfig,
     error::{TAError, TAResult},
     state::IndicatorState,
-    trend::SMA,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -46,15 +46,14 @@ impl Default for BBOutput {
 ///
 /// ```
 /// use rolling_ta::ta::volatility::{BB, BBConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut bb = BB::new(BBConfig::new(20, 2.0));
-/// let data = OhlcvSeries::from_closes(&[
-///     100.0, 101.0, 102.0, 101.5, 103.0, 102.0, 104.0, 103.5, 105.0, 104.0,
-///     106.0, 105.5, 107.0, 106.0, 108.0, 107.5, 109.0, 108.0, 110.0, 109.0,
-/// ]);
-/// bb.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = (0..25).map(|i| {
+///     Ohlcv::from_close(100.0 + (i as f64 * 0.5).sin() * 5.0)
+/// }).collect();
+/// bb.calc(&candles).unwrap();
 ///
 /// assert!(bb.state().is_ready());
 /// ```
@@ -62,24 +61,21 @@ impl Default for BBOutput {
 pub struct BB {
     config: BBConfig,
     state: IndicatorState,
-    sma: SMA,
-    window: VecDeque<f64>,
     history: Vec<BBOutput>,
     latest: Option<BBOutput>,
+    /// Track last snapshot length for next() to detect new candles
+    last_len: usize,
 }
 
 impl BB {
     /// Create a new Bollinger Bands indicator.
     pub fn new(config: BBConfig) -> Self {
-        use crate::ta::config::SMAConfig;
-
         Self {
             config,
             state: IndicatorState::Uninitialized,
-            sma: SMA::new(SMAConfig::new(config.period)),
-            window: VecDeque::with_capacity(config.period),
             history: Vec::new(),
             latest: None,
+            last_len: 0,
         }
     }
 
@@ -95,30 +91,33 @@ impl BB {
         self.config.std_dev_mult
     }
 
-    /// Calculate population standard deviation of a slice.
+    /// Calculate SMA and population standard deviation in a single pass.
+    /// Returns (mean, std_dev)
     #[inline]
-    fn pop_std_dev(data: &[f64]) -> f64 {
-        let n = data.len() as f64;
+    fn mean_and_std_dev(closes: &[f64]) -> (f64, f64) {
+        let n = closes.len() as f64;
         if n == 0.0 {
-            return 0.0;
+            return (0.0, 0.0);
         }
 
-        let mean: f64 = data.iter().sum::<f64>() / n;
-        let variance: f64 = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
-        variance.sqrt()
+        let sum: f64 = closes.iter().sum();
+        let mean = sum / n;
+
+        let variance: f64 = closes.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
+        (mean, variance.sqrt())
     }
 
-    /// Calculate population standard deviation from VecDeque.
+    /// Compute BB output from slice of closes.
     #[inline]
-    fn pop_std_dev_deque(data: &VecDeque<f64>) -> f64 {
-        let n = data.len() as f64;
-        if n == 0.0 {
-            return 0.0;
-        }
+    fn compute_from_closes(closes: &[f64], mult: f64) -> BBOutput {
+        let (mean, std_dev) = Self::mean_and_std_dev(closes);
+        let weighted_std = std_dev * mult;
 
-        let mean: f64 = data.iter().sum::<f64>() / n;
-        let variance: f64 = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
-        variance.sqrt()
+        BBOutput {
+            upper: mean + weighted_std,
+            middle: mean,
+            lower: mean - weighted_std,
+        }
     }
 }
 
@@ -136,7 +135,7 @@ impl Indicator for BB {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
         let n = data.len();
 
@@ -147,13 +146,12 @@ impl Indicator for BB {
             });
         }
 
-        // Calculate SMA first
-        self.sma.calc(data)?;
-        let sma_values = self.sma.history();
+        if period == 0 {
+            return Err(TAError::InvalidPeriod(0));
+        }
 
-        // Reset BB state
+        // Reset state
         self.history = Vec::with_capacity(n);
-        let closes = &data.closes;
         let mult = self.config.std_dev_mult;
 
         // Fill with NaN for warmup period
@@ -163,69 +161,60 @@ impl Indicator for BB {
 
         // Calculate BB from period-1 onwards
         for i in (period - 1)..n {
-            let ma = sma_values[i];
-            let window_slice = &closes[(i + 1 - period)..=i];
-            let std_dev = Self::pop_std_dev(window_slice);
-            let weighted_std = std_dev * mult;
+            // Extract closes for the window
+            let window_closes: Vec<f64> = data[(i + 1 - period)..=i]
+                .iter()
+                .map(|c| c.close.0)
+                .collect();
 
-            self.history.push(BBOutput {
-                upper: ma + weighted_std,
-                middle: ma,
-                lower: ma - weighted_std,
-            });
-        }
-
-        // Set up window for streaming
-        self.window.clear();
-        for &v in &closes[(n - period)..] {
-            self.window.push_back(v);
+            let output = Self::compute_from_closes(&window_closes, mult);
+            self.history.push(output);
         }
 
         self.latest = self.history.last().copied();
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
         let period = self.config.period;
-        let close = tick.close.0;
 
-        // Update SMA
-        let sma_result = self.sma.update(tick)?;
-
-        // Handle warming
-        if self.window.len() < period {
-            self.window.push_back(close);
-
-            if self.window.len() < period {
+        if len < period {
+            // Not enough data yet
+            if len > self.last_len || self.last_len == 0 {
                 self.history.push(BBOutput::default());
-                self.state = IndicatorState::Warming {
-                    count: self.window.len(),
-                };
-                return Ok(None);
+                self.last_len = len;
+                self.state = IndicatorState::Warming { count: len };
             }
-        } else {
-            self.window.pop_front();
-            self.window.push_back(close);
+            return None;
         }
 
-        // Now we have enough data
-        let ma = sma_result.unwrap_or_else(|| self.sma.latest().unwrap_or(0.0));
-        let std_dev = Self::pop_std_dev_deque(&self.window);
-        let weighted_std = std_dev * self.config.std_dev_mult;
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
 
-        let output = BBOutput {
-            upper: ma + weighted_std,
-            middle: ma,
-            lower: ma - weighted_std,
-        };
+        // Extract last `period` closes
+        let window_closes: Vec<f64> = candles[(len - period)..]
+            .iter()
+            .map(|c| c.close.0)
+            .collect();
 
-        self.history.push(output);
+        let output = Self::compute_from_closes(&window_closes, self.config.std_dev_mult);
+
+        if is_new_candle {
+            self.history.push(output);
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            // Same candle - update last value
+            *self.history.last_mut().unwrap() = output;
+        }
+
         self.latest = Some(output);
         self.state = IndicatorState::Ready;
 
-        Ok(Some(output))
+        Some(output)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -233,10 +222,9 @@ impl Indicator for BB {
     }
 
     fn reset(&mut self) {
-        self.sma.reset();
-        self.window.clear();
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -269,14 +257,22 @@ impl HistoricalIndicator for BB {
 mod tests {
     use super::*;
 
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close + 2.0, close - 1.0, close, 1000.0))
+            .collect()
+    }
+
     #[test]
     fn bb_batch_calculation() {
         let mut bb = BB::new(BBConfig::new(5, 2.0));
-        let data = OhlcvSeries::from_closes(&[
+        let candles = candles_from_closes(&[
             100.0, 102.0, 101.0, 103.0, 105.0, 104.0, 106.0, 108.0, 107.0, 109.0,
         ]);
 
-        bb.calc(&data).unwrap();
+        bb.calc(&candles).unwrap();
 
         assert!(bb.state().is_ready());
         assert_eq!(bb.len(), 10);
@@ -301,28 +297,88 @@ mod tests {
     }
 
     #[test]
-    fn bb_streaming_update() {
+    fn bb_streaming_next() {
         let mut bb = BB::new(BBConfig::new(3, 2.0));
+        let candles = candles_from_closes(&[100.0, 102.0, 104.0, 103.0, 105.0]);
 
-        // Warmup
-        assert!(bb
-            .update(&Ohlcv::new(0, 100.0, 102.0, 99.0, 100.0, 1000.0))
-            .unwrap()
-            .is_none());
-        assert!(bb
-            .update(&Ohlcv::new(1, 100.0, 103.0, 99.0, 102.0, 1000.0))
-            .unwrap()
-            .is_none());
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = bb.next(snapshot);
 
-        // Third value - should get first BB
-        let result = bb
-            .update(&Ohlcv::new(2, 102.0, 105.0, 101.0, 104.0, 1000.0))
-            .unwrap();
-        assert!(result.is_some());
+            // Should get result when we have period = 3 candles
+            if i >= 3 {
+                assert!(result.is_some(), "Should have result at len {}", i);
+                let output = result.unwrap();
+                assert!(output.upper > output.middle);
+                assert!(output.middle > output.lower);
+            }
+        }
 
-        let output = result.unwrap();
-        assert!(output.upper > output.middle);
-        assert!(output.middle > output.lower);
+        assert!(bb.state().is_ready());
+    }
+
+    #[test]
+    fn bb_batch_vs_streaming_equivalence() {
+        let closes: Vec<f64> = (0..20)
+            .map(|i| 100.0 + (i as f64 * 0.5).sin() * 5.0)
+            .collect();
+        let candles = candles_from_closes(&closes);
+        let config = BBConfig::new(5, 2.0);
+
+        // Batch
+        let mut batch = BB::new(config);
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = BB::new(config);
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare valid values
+        let batch_valid: Vec<_> = batch
+            .history()
+            .iter()
+            .filter(|o| !o.middle.is_nan())
+            .collect();
+        let stream_valid: Vec<_> = stream
+            .history()
+            .iter()
+            .filter(|o| !o.middle.is_nan())
+            .collect();
+
+        assert_eq!(
+            batch_valid.len(),
+            stream_valid.len(),
+            "batch={}, stream={}",
+            batch_valid.len(),
+            stream_valid.len()
+        );
+
+        for (i, (b, s)) in batch_valid.iter().zip(stream_valid.iter()).enumerate() {
+            assert!(
+                (b.upper - s.upper).abs() < 1e-10,
+                "Upper mismatch at {}: batch={}, stream={}",
+                i,
+                b.upper,
+                s.upper
+            );
+            assert!(
+                (b.middle - s.middle).abs() < 1e-10,
+                "Middle mismatch at {}: batch={}, stream={}",
+                i,
+                b.middle,
+                s.middle
+            );
+            assert!(
+                (b.lower - s.lower).abs() < 1e-10,
+                "Lower mismatch at {}: batch={}, stream={}",
+                i,
+                b.lower,
+                s.lower
+            );
+        }
     }
 
     #[test]
@@ -331,10 +387,10 @@ mod tests {
         let mut bb_volatile = BB::new(BBConfig::new(5, 2.0));
 
         // Stable prices
-        let stable = OhlcvSeries::from_closes(&[100.0, 100.0, 100.0, 100.0, 100.0]);
+        let stable = candles_from_closes(&[100.0, 100.0, 100.0, 100.0, 100.0]);
 
         // Volatile prices (same mean)
-        let volatile = OhlcvSeries::from_closes(&[80.0, 120.0, 80.0, 120.0, 100.0]);
+        let volatile = candles_from_closes(&[80.0, 120.0, 80.0, 120.0, 100.0]);
 
         bb_stable.calc(&stable).unwrap();
         bb_volatile.calc(&volatile).unwrap();
@@ -357,9 +413,9 @@ mod tests {
     #[test]
     fn bb_reset() {
         let mut bb = BB::new(BBConfig::new(5, 2.0));
-        let data = OhlcvSeries::from_closes(&[100.0, 102.0, 101.0, 103.0, 105.0]);
+        let candles = candles_from_closes(&[100.0, 102.0, 101.0, 103.0, 105.0]);
 
-        bb.calc(&data).unwrap();
+        bb.calc(&candles).unwrap();
         assert!(bb.state().is_ready());
         assert_eq!(bb.len(), 5);
 
@@ -369,11 +425,21 @@ mod tests {
     }
 
     #[test]
-    fn bb_pop_std_dev() {
+    fn bb_mean_and_std_dev() {
         // Test: std dev of [2, 4, 4, 4, 5, 5, 7, 9]
         // Mean = 5, variance = 4, std_dev = 2
         let data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
-        let std_dev = BB::pop_std_dev(&data);
+        let (mean, std_dev) = BB::mean_and_std_dev(&data);
+        assert!((mean - 5.0).abs() < 1e-10);
         assert!((std_dev - 2.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn bb_insufficient_data() {
+        let mut bb = BB::new(BBConfig::new(20, 2.0));
+        let candles = candles_from_closes(&[100.0; 10]);
+
+        let result = bb.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 }

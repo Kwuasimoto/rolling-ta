@@ -3,31 +3,39 @@
 use crate::ta::{
     config::EMAConfig,
     error::{TAError, TAResult},
-    math::{ema_multiplier, ema_step, Temporal},
+    math::{ema_multiplier, ema_step},
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
-    Indicator, HistoricalIndicator,
+    types::Ohlcv,
+    HistoricalIndicator, Indicator,
 };
 
 /// Exponential Moving Average indicator.
 ///
 /// Gives more weight to recent prices, making it more responsive to new information.
+/// This indicator computes directly from `&[Ohlcv]` slices, making it suitable for
+/// SharedWindow architecture and parallel computation with Rayon.
 ///
 /// # Formula
 ///
-/// EMA = (Price - Previous EMA) × Multiplier + Previous EMA
+/// EMA = (Price - Previous EMA) * Multiplier + Previous EMA
 /// Multiplier = 2 / (Period + 1)
 ///
 /// # Example
 ///
 /// ```
 /// use rolling_ta::ta::trend::{EMA, EMAConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut ema = EMA::new(EMAConfig::new(3));
-/// let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-/// ema.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = vec![
+///     Ohlcv::from_close(1.0),
+///     Ohlcv::from_close(2.0),
+///     Ohlcv::from_close(3.0),
+///     Ohlcv::from_close(4.0),
+///     Ohlcv::from_close(5.0),
+/// ];
+/// ema.calc(&candles).unwrap();
 ///
 /// assert!(ema.state().is_ready());
 /// ```
@@ -36,38 +44,27 @@ pub struct EMA {
     config: EMAConfig,
     state: IndicatorState,
     multiplier: f64,
+    /// Previous EMA value for incremental calculation.
     prev_ema: Option<f64>,
-    warmup_sum: f64,
-    warmup_count: usize,
     history: Vec<f64>,
     latest: Option<f64>,
-    /// Temporal state for candle period detection.
-    temporal: Temporal,
-    /// EMA value at the start of current candle (for same-candle recalculation).
-    ema_at_candle_start: Option<f64>,
+    /// Track last snapshot length for next() to detect new candles.
+    last_len: usize,
 }
 
 impl EMA {
     /// Create a new EMA indicator with the given configuration.
     pub fn new(config: EMAConfig) -> Self {
         let multiplier = ema_multiplier(config.period);
-        let temporal = if config.timeframe > 0 {
-            Temporal::new(config.timeframe)
-        } else {
-            Temporal::disabled()
-        };
 
         Self {
             config,
             state: IndicatorState::Uninitialized,
             multiplier,
             prev_ema: None,
-            warmup_sum: 0.0,
-            warmup_count: 0,
             history: Vec::new(),
             latest: None,
-            temporal,
-            ema_at_candle_start: None,
+            last_len: 0,
         }
     }
 
@@ -83,16 +80,16 @@ impl EMA {
         self.multiplier
     }
 
-    /// Get the timeframe (0 = temporal mode disabled).
+    /// Compute initial SMA from the last N candles (for EMA seeding).
     #[inline]
-    pub fn timeframe(&self) -> i64 {
-        self.config.timeframe
-    }
-
-    /// Check if temporal mode is enabled.
-    #[inline]
-    pub fn is_temporal(&self) -> bool {
-        self.config.timeframe > 0
+    fn compute_initial_sma(candles: &[Ohlcv], period: usize) -> f64 {
+        let sum: f64 = candles
+            .iter()
+            .rev()
+            .take(period)
+            .map(|c| c.close.0)
+            .sum();
+        sum / period as f64
     }
 }
 
@@ -110,7 +107,7 @@ impl Indicator for EMA {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
 
         if data.len() < period {
@@ -126,106 +123,86 @@ impl Indicator for EMA {
 
         // Reset state
         self.history = Vec::with_capacity(data.len());
-        self.warmup_sum = 0.0;
-        self.warmup_count = 0;
+        self.prev_ema = None;
 
-        let closes = &data.closes;
-
-        // Calculate initial SMA for seeding EMA
-        for i in 0..period {
-            self.warmup_sum += closes[i];
+        // Fill NaN for warmup period
+        for _ in 0..(period - 1) {
             self.history.push(f64::NAN);
         }
 
-        let mut ema = self.warmup_sum / period as f64;
-        self.history[period - 1] = ema;
+        // Calculate initial SMA for seeding EMA
+        let mut ema: f64 = data.iter().take(period).map(|c| c.close.0).sum();
+        ema /= period as f64;
+        self.history.push(ema);
 
-        // EMA calculation
-        for i in period..closes.len() {
-            ema = ema_step(closes[i], ema, self.multiplier);
+        // EMA calculation for remaining data
+        for i in period..data.len() {
+            ema = ema_step(data[i].close.0, ema, self.multiplier);
             self.history.push(ema);
         }
 
         self.prev_ema = Some(ema);
         self.latest = Some(ema);
-        self.warmup_count = period;
+        self.last_len = data.len();
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let close = tick.close.0;
-        let timestamp = tick.timestamp.0;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
         let period = self.config.period;
+        let len = candles.len();
 
-        // Check if this is a same-candle update (temporal mode)
-        let is_same_period = self.temporal.is_same_period(timestamp);
-
-        if is_same_period {
-            // Same candle period - update in place
-            if self.state.is_ready() {
-                // Restore EMA from candle start and recalculate
-                let base_ema = self.ema_at_candle_start.unwrap_or_else(|| self.prev_ema.unwrap());
-                let ema = ema_step(close, base_ema, self.multiplier);
-                self.prev_ema = Some(ema);
-                self.latest = Some(ema);
-                // Update last history entry in place
-                if let Some(last) = self.history.last_mut() {
-                    *last = ema;
-                }
-                Ok(Some(ema))
-            } else {
-                // Still warming up - update the last accumulated close
-                // Subtract the previous close for this period and add the new one
-                if !self.history.is_empty() {
-                    // During warmup, history entries are NAN, but we track the close
-                    // in warmup_sum. We need to update warmup_sum by replacing the
-                    // last close with the new one.
-                    // The last close is stored in ema_at_candle_start during warmup
-                    if let Some(old_close) = self.ema_at_candle_start {
-                        self.warmup_sum = self.warmup_sum - old_close + close;
-                        self.ema_at_candle_start = Some(close);
-                    }
-                }
-                Ok(None)
-            }
-        } else {
-            // New candle period - normal update path
-            self.temporal.record(timestamp);
-            self.warmup_count += 1;
-
-            if self.warmup_count < period {
-                // Still warming up - accumulate for SMA seed
-                self.warmup_sum += close;
-                self.ema_at_candle_start = Some(close); // Track for potential same-candle updates
-                self.history.push(f64::NAN);
-                self.state = IndicatorState::Warming {
-                    count: self.warmup_count,
-                };
-                Ok(None)
-            } else if self.warmup_count == period {
-                // First EMA value - use SMA as seed
-                self.warmup_sum += close;
-                let ema = self.warmup_sum / period as f64;
-                self.prev_ema = Some(ema);
-                self.ema_at_candle_start = self.prev_ema; // This is the start for next candle
-                self.latest = Some(ema);
-                self.history.push(ema);
-                self.state = IndicatorState::Ready;
-                Ok(Some(ema))
-            } else {
-                // Normal EMA calculation
-                // Save current EMA as the base for potential same-candle updates
-                self.ema_at_candle_start = self.prev_ema;
-                let prev = self.prev_ema.unwrap();
-                let ema = ema_step(close, prev, self.multiplier);
-                self.prev_ema = Some(ema);
-                self.latest = Some(ema);
-                self.history.push(ema);
-                Ok(Some(ema))
-            }
+        if len < period {
+            // Not enough data - still warming up
+            self.state = self.state.increment(period);
+            return None;
         }
+
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.prev_ema.is_none();
+
+        let ema = if let Some(prev) = self.prev_ema {
+            if is_new_candle {
+                // New candle - apply EMA step
+                ema_step(candles[len - 1].close.0, prev, self.multiplier)
+            } else {
+                // Same snapshot size - recalculate from previous EMA base
+                // This handles the case where the same snapshot is passed again
+                // (shouldn't normally happen in production, but handle gracefully)
+                ema_step(candles[len - 1].close.0, prev, self.multiplier)
+            }
+        } else if len == period {
+            // First calculation with exactly enough data - seed with SMA
+            Self::compute_initial_sma(candles, period)
+        } else {
+            // First calculation with more data than period - need to catch up
+            // Compute initial SMA from first `period` candles
+            let mut ema: f64 = candles.iter().take(period).map(|c| c.close.0).sum();
+            ema /= period as f64;
+
+            // Apply EMA steps for remaining candles
+            for i in period..len {
+                ema = ema_step(candles[i].close.0, ema, self.multiplier);
+            }
+            ema
+        };
+
+        // Update state
+        self.prev_ema = Some(ema);
+        self.latest = Some(ema);
+        self.state = IndicatorState::Ready;
+
+        // Only push to history if this is a new candle
+        if is_new_candle {
+            self.history.push(ema);
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            // Update last history entry in place
+            *self.history.last_mut().unwrap() = ema;
+        }
+
+        Some(ema)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -235,12 +212,9 @@ impl Indicator for EMA {
     fn reset(&mut self) {
         self.state = IndicatorState::Uninitialized;
         self.prev_ema = None;
-        self.warmup_sum = 0.0;
-        self.warmup_count = 0;
         self.history.clear();
         self.latest = None;
-        self.temporal.reset();
-        self.ema_at_candle_start = None;
+        self.last_len = 0;
     }
 
     fn warmup_period(&self) -> usize {
@@ -273,12 +247,21 @@ impl HistoricalIndicator for EMA {
 mod tests {
     use super::*;
 
+    /// Helper to build candles from close prices.
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 0.0))
+            .collect()
+    }
+
     #[test]
     fn ema_batch_calculation() {
         let mut ema = EMA::new(EMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
 
-        ema.calc(&data).unwrap();
+        ema.calc(&candles).unwrap();
 
         assert!(ema.state().is_ready());
         assert_eq!(ema.len(), 5);
@@ -299,21 +282,26 @@ mod tests {
     }
 
     #[test]
-    fn ema_streaming_update() {
+    fn ema_streaming_next() {
         let mut ema = EMA::new(EMAConfig::new(3));
 
-        // Warmup
-        assert!(ema.update(&Ohlcv::from_close(1.0)).unwrap().is_none());
-        assert!(ema.update(&Ohlcv::from_close(2.0)).unwrap().is_none());
+        // Warmup - not enough candles
+        let snap1 = candles_from_closes(&[1.0]);
+        assert!(ema.next(&snap1).is_none());
 
-        // Third value - should get first EMA (which is SMA)
-        let result = ema.update(&Ohlcv::from_close(3.0)).unwrap();
+        let snap2 = candles_from_closes(&[1.0, 2.0]);
+        assert!(ema.next(&snap2).is_none());
+
+        // Now should be ready - first EMA is SMA
+        let snap3 = candles_from_closes(&[1.0, 2.0, 3.0]);
+        let result = ema.next(&snap3);
         assert!(result.is_some());
-        assert!((result.unwrap() - 2.0).abs() < 0.0001);
+        assert!((result.unwrap() - 2.0).abs() < 0.0001); // SMA(1,2,3) = 2
 
-        // Fourth value
-        let result = ema.update(&Ohlcv::from_close(4.0)).unwrap();
-        assert!((result.unwrap() - 3.0).abs() < 0.0001);
+        // Continue streaming
+        let snap4 = candles_from_closes(&[1.0, 2.0, 3.0, 4.0]);
+        let result = ema.next(&snap4);
+        assert!((result.unwrap() - 3.0).abs() < 0.0001); // (4-2)*0.5+2 = 3
     }
 
     #[test]
@@ -326,8 +314,8 @@ mod tests {
     #[test]
     fn ema_reset() {
         let mut ema = EMA::new(EMAConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
-        ema.calc(&data).unwrap();
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        ema.calc(&candles).unwrap();
 
         assert!(ema.state().is_ready());
 
@@ -338,139 +326,93 @@ mod tests {
         assert!(ema.latest().is_none());
     }
 
-    // Temporal tests
-
     #[test]
-    fn ema_temporal_config() {
-        // Non-temporal (default)
-        let ema = EMA::new(EMAConfig::new(14));
-        assert!(!ema.is_temporal());
-        assert_eq!(ema.timeframe(), 0);
+    fn ema_negative_indexing() {
+        let mut ema = EMA::new(EMAConfig::new(3));
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        ema.calc(&candles).unwrap();
 
-        // Temporal mode
-        let ema = EMA::new(EMAConfig::with_timeframe(14, 60));
-        assert!(ema.is_temporal());
-        assert_eq!(ema.timeframe(), 60);
+        // -1 should be last value (4.0)
+        assert!((ema.get(-1).unwrap() - 4.0).abs() < 0.0001);
+        // -2 should be second to last (3.0)
+        assert!((ema.get(-2).unwrap() - 3.0).abs() < 0.0001);
     }
 
     #[test]
-    fn ema_temporal_same_period_updates_in_place() {
-        // 1-minute timeframe (60 seconds), period 3
-        let mut ema = EMA::new(EMAConfig::with_timeframe(3, 60));
+    fn ema_insufficient_data() {
+        let mut ema = EMA::new(EMAConfig::new(10));
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0]);
 
-        // Warmup with different candle periods
-        // Period 16: timestamp 960
-        ema.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        assert_eq!(ema.len(), 1);
-
-        // Period 17: timestamp 1020
-        ema.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(ema.len(), 2);
-
-        // Period 18: timestamp 1080 - this should be ready
-        // First EMA = SMA of (1, 2, 3) = 2.0
-        let result = ema.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 2.0).abs() < 0.0001);
-        assert_eq!(ema.len(), 3);
-
-        // Same period (still 18): timestamp 1100 - should update in place
-        // Multiplier = 2/(3+1) = 0.5
-        // New EMA = (6 - 2) * 0.5 + 2 = 4
-        let result = ema.update(&Ohlcv::new(1100, 6.0, 6.0, 6.0, 6.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 4.0).abs() < 0.0001);
-        assert_eq!(ema.len(), 3); // Still 3, not 4!
-
-        // Same period again: timestamp 1110 - should update in place again
-        // New EMA = (9 - 2) * 0.5 + 2 = 5.5
-        let result = ema.update(&Ohlcv::new(1110, 9.0, 9.0, 9.0, 9.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 5.5).abs() < 0.0001);
-        assert_eq!(ema.len(), 3); // Still 3!
+        let result = ema.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 
     #[test]
-    fn ema_temporal_new_period_pushes() {
-        // 5-minute timeframe (300 seconds)
-        let mut ema = EMA::new(EMAConfig::with_timeframe(3, 300));
-
-        // Period 3: timestamps 900-1199
-        ema.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(1100, 1.5, 1.5, 1.5, 1.5, 0.0)).unwrap(); // Same period, updates
-        assert_eq!(ema.len(), 1);
-
-        // Period 4: timestamps 1200-1499
-        ema.update(&Ohlcv::new(1200, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        assert_eq!(ema.len(), 2);
-
-        // Period 5: timestamps 1500-1799 - should be ready
-        // First EMA = SMA of (1.5, 2.0, 3.0) = 6.5/3 ≈ 2.1667
-        let result = ema.update(&Ohlcv::new(1500, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 2.1667).abs() < 0.01);
-        assert_eq!(ema.len(), 3);
-
-        // Period 6: timestamp 1800 - new period
-        // EMA = (4 - 2.1667) * 0.5 + 2.1667 ≈ 3.0833
-        let result = ema.update(&Ohlcv::new(1800, 4.0, 4.0, 4.0, 4.0, 0.0)).unwrap();
-        assert!(result.is_some());
-        assert!((result.unwrap() - 3.0833).abs() < 0.01);
-        assert_eq!(ema.len(), 4);
-    }
-
-    #[test]
-    fn ema_non_temporal_always_pushes() {
-        // Non-temporal mode (timeframe = 0)
+    fn ema_next_catches_up_from_beginning() {
         let mut ema = EMA::new(EMAConfig::new(3));
 
-        // All at same timestamp - should still push each one
-        ema.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(1000, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(1000, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+        // Large snapshot - EMA catches up from the beginning
+        let candles = candles_from_closes(&[100.0, 200.0, 1.0, 2.0, 3.0]);
 
-        assert_eq!(ema.len(), 3);
-        assert!(ema.state().is_ready());
-    }
-
-    #[test]
-    fn ema_temporal_reset_preserves_config() {
-        let mut ema = EMA::new(EMAConfig::with_timeframe(3, 60));
-
-        // Add some data
-        ema.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-
-        assert!(ema.is_temporal());
-        assert_eq!(ema.timeframe(), 60);
-
-        ema.reset();
-
-        // Temporal config should be preserved
-        assert!(ema.is_temporal());
-        assert_eq!(ema.timeframe(), 60);
-        assert!(ema.state().is_uninitialized());
-    }
-
-    #[test]
-    fn ema_temporal_warmup_same_period_updates() {
-        // Test same-period updates during warmup phase
-        let mut ema = EMA::new(EMAConfig::with_timeframe(3, 60));
-
-        // Period 16: multiple ticks, should update in place
-        ema.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
-        ema.update(&Ohlcv::new(990, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap(); // Same period
-        assert_eq!(ema.len(), 1);
-
-        // Period 17
-        ema.update(&Ohlcv::new(1020, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
-        assert_eq!(ema.len(), 2);
-
-        // Period 18 - should be ready with SMA of (2, 3, 4) = 3.0
-        let result = ema.update(&Ohlcv::new(1080, 4.0, 4.0, 4.0, 4.0, 0.0)).unwrap();
+        // Multiplier = 2/(3+1) = 0.5
+        // SMA(100,200,1) = 100.333...
+        // EMA at idx 3: (2 - 100.333) * 0.5 + 100.333 = 51.166...
+        // EMA at idx 4: (3 - 51.166) * 0.5 + 51.166 = 27.083...
+        let result = ema.next(&candles);
         assert!(result.is_some());
-        // The window has values: 2.0 (updated), 3.0, 4.0 -> mean = 3.0
-        assert!((result.unwrap() - 3.0).abs() < 0.0001);
+        assert!((result.unwrap() - 27.0833).abs() < 0.01);
+    }
+
+    #[test]
+    fn ema_parallel_safe() {
+        use std::sync::Arc;
+
+        let candles = Arc::new(candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0]));
+
+        let mut ema1 = EMA::new(EMAConfig::new(3));
+        let mut ema2 = EMA::new(EMAConfig::new(3));
+
+        // Both can read from the same snapshot
+        let snapshot: &[Ohlcv] = &candles;
+        let r1 = ema1.next(snapshot);
+        let r2 = ema2.next(snapshot);
+
+        assert_eq!(r1, r2);
+        // EMA catches up from beginning:
+        // SMA(1,2,3) = 2.0
+        // EMA(4) = (4-2)*0.5+2 = 3.0
+        // EMA(5) = (5-3)*0.5+3 = 4.0
+        assert!((r1.unwrap() - 4.0).abs() < 0.0001);
+    }
+
+    #[test]
+    fn ema_batch_vs_streaming_equivalence() {
+        let candles = candles_from_closes(&[1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]);
+        let period = 3;
+
+        // Batch
+        let mut batch = EMA::new(EMAConfig::new(period));
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = EMA::new(EMAConfig::new(period));
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare computed values (skip NaN)
+        let batch_computed: Vec<f64> = batch.history().iter().filter(|v| !v.is_nan()).copied().collect();
+        let stream_computed = stream.history();
+
+        assert_eq!(batch_computed.len(), stream_computed.len());
+
+        for (b, s) in batch_computed.iter().zip(stream_computed.iter()) {
+            assert!(
+                (b - s).abs() < 1e-10,
+                "Mismatch: batch={}, stream={}",
+                b,
+                s
+            );
+        }
     }
 }

@@ -2,12 +2,15 @@
 //!
 //! MACD is a trend-following momentum indicator that shows the relationship
 //! between two exponential moving averages of an asset's price.
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::{EMAConfig, MACDConfig},
     error::{TAError, TAResult},
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -37,6 +40,8 @@ impl Default for MACDOutput {
 /// MACD indicator.
 ///
 /// Composes two EMAs (fast and slow) and a signal line.
+/// This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+/// for SharedWindow architecture and parallel computation with Rayon.
 ///
 /// # Formula
 ///
@@ -48,12 +53,14 @@ impl Default for MACDOutput {
 ///
 /// ```
 /// use rolling_ta::ta::trend::{MACD, MACDConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut macd = MACD::new(MACDConfig::new(12, 26, 9));
-/// // Need 26+ candles for MACD to warm up (slow period)
-/// // Need 26 + 9 - 1 = 34 candles for signal to warm up
+/// let candles: Vec<Ohlcv> = (0..50).map(|i| Ohlcv::from_close(100.0 + i as f64)).collect();
+/// macd.calc(&candles).unwrap();
+///
+/// assert!(macd.state().is_ready());
 /// ```
 #[derive(Debug, Clone)]
 pub struct MACD {
@@ -61,12 +68,18 @@ pub struct MACD {
     state: IndicatorState,
     fast_ema: EMA,
     slow_ema: EMA,
-    // Signal line state (EMA of MACD values)
+    /// Signal line multiplier: 2 / (signal_period + 1)
     signal_mult: f64,
-    signal_value: f64,
+    /// Current signal EMA value
+    signal_value: Option<f64>,
+    /// Count of MACD values seen for signal warmup
     signal_warmup: usize,
+    /// Sum of MACD values during signal warmup (for initial SMA)
+    signal_sum: f64,
     history: Vec<MACDOutput>,
     latest: Option<MACDOutput>,
+    /// Track last snapshot length for next() to detect new candles.
+    last_len: usize,
 }
 
 impl MACD {
@@ -80,10 +93,12 @@ impl MACD {
             fast_ema: EMA::new(EMAConfig::new(config.fast_period)),
             slow_ema: EMA::new(EMAConfig::new(config.slow_period)),
             signal_mult,
-            signal_value: 0.0,
+            signal_value: None,
             signal_warmup: 0,
+            signal_sum: 0.0,
             history: Vec::new(),
             latest: None,
+            last_len: 0,
         }
     }
 
@@ -104,6 +119,47 @@ impl MACD {
     pub fn signal_period(&self) -> usize {
         self.config.signal_period
     }
+
+    /// Compute MACD output from fast and slow EMA values.
+    /// Updates signal line state internally.
+    fn compute_output(&mut self, fast: f64, slow: f64) -> MACDOutput {
+        let macd = fast - slow;
+
+        // Handle signal warmup
+        if self.signal_warmup < self.config.signal_period {
+            self.signal_warmup += 1;
+            self.signal_sum += macd;
+
+            if self.signal_warmup < self.config.signal_period {
+                // Still warming up signal
+                return MACDOutput {
+                    macd,
+                    signal: f64::NAN,
+                    histogram: f64::NAN,
+                };
+            }
+
+            // First valid signal (SMA of first signal_period MACD values)
+            let signal = self.signal_sum / self.config.signal_period as f64;
+            self.signal_value = Some(signal);
+            return MACDOutput {
+                macd,
+                signal,
+                histogram: macd - signal,
+            };
+        }
+
+        // Apply EMA smoothing to signal
+        let prev_signal = self.signal_value.unwrap_or(macd);
+        let signal = macd * self.signal_mult + prev_signal * (1.0 - self.signal_mult);
+        self.signal_value = Some(signal);
+
+        MACDOutput {
+            macd,
+            signal,
+            histogram: macd - signal,
+        }
+    }
 }
 
 impl Default for MACD {
@@ -120,9 +176,9 @@ impl Indicator for MACD {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let n = data.len();
-        let min_required = self.config.slow_period;
+        let min_required = self.warmup_period();
 
         if n < min_required {
             return Err(TAError::InsufficientData {
@@ -135,14 +191,15 @@ impl Indicator for MACD {
         self.fast_ema.calc(data)?;
         self.slow_ema.calc(data)?;
 
-        let fast_history = self.fast_ema.history();
-        let slow_history = self.slow_ema.history();
+        // Collect EMA values to avoid borrow issues
+        let fast_values: Vec<f64> = self.fast_ema.history().to_vec();
+        let slow_values: Vec<f64> = self.slow_ema.history().to_vec();
 
         // Reset MACD state
         self.history = Vec::with_capacity(n);
-
-        // Collect MACD values for signal calculation
-        let mut macd_values: Vec<f64> = Vec::with_capacity(n);
+        self.signal_value = None;
+        self.signal_warmup = 0;
+        self.signal_sum = 0.0;
 
         // MACD line becomes valid when slow EMA is valid (slow_period - 1)
         let macd_start = self.config.slow_period - 1;
@@ -150,133 +207,83 @@ impl Indicator for MACD {
         // Fill NaN until we have valid MACD
         for _ in 0..macd_start {
             self.history.push(MACDOutput::default());
-            macd_values.push(f64::NAN);
         }
 
-        // Calculate MACD values
+        // Calculate MACD values and signal
         for i in macd_start..n {
-            let macd = fast_history[i] - slow_history[i];
-            macd_values.push(macd);
+            let fast = fast_values[i];
+            let slow = slow_values[i];
+            let output = self.compute_output(fast, slow);
+            self.history.push(output);
         }
 
-        // Calculate signal line (EMA of MACD values)
-        // Signal starts after macd_start + signal_period - 1
-        let signal_start = macd_start + self.config.signal_period - 1;
-
-        // Initialize signal EMA using first signal_period MACD values
-        let signal_init_start = macd_start;
-        let signal_init_end = signal_start + 1;
-
-        let mut signal = if signal_init_end <= n {
-            // SMA of first signal_period MACD values
-            let sum: f64 = macd_values[signal_init_start..signal_init_end].iter().sum();
-            sum / self.config.signal_period as f64
-        } else {
-            0.0
-        };
-
-        // Fill MACD-only values (no signal yet)
-        for i in macd_start..signal_start.min(n) {
-            self.history.push(MACDOutput {
-                macd: macd_values[i],
-                signal: f64::NAN,
-                histogram: f64::NAN,
-            });
-        }
-
-        // Calculate full MACD output with signal
-        if signal_start < n {
-            // First signal value
-            let macd_val = macd_values[signal_start];
-            self.history.push(MACDOutput {
-                macd: macd_val,
-                signal,
-                histogram: macd_val - signal,
-            });
-
-            // Subsequent values with EMA smoothing
-            for i in (signal_start + 1)..n {
-                let macd_val = macd_values[i];
-                signal = macd_val * self.signal_mult + signal * (1.0 - self.signal_mult);
-                self.history.push(MACDOutput {
-                    macd: macd_val,
-                    signal,
-                    histogram: macd_val - signal,
-                });
-            }
-        }
-
-        self.signal_value = signal;
-        self.signal_warmup = self.config.signal_period;
         self.latest = self.history.last().copied();
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        // Update both EMAs
-        let fast_result = self.fast_ema.update(tick)?;
-        let slow_result = self.slow_ema.update(tick)?;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
 
-        // Need both EMAs to be valid for MACD
-        match (fast_result, slow_result) {
-            (Some(fast), Some(slow)) => {
-                let macd = fast - slow;
+        // MACD becomes valid when slow EMA is ready (slow_period candles)
+        // Signal needs additional signal_period - 1 MACD values
+        let min_for_macd = self.config.slow_period;
 
-                // Handle signal warmup
-                if self.signal_warmup < self.config.signal_period {
-                    self.signal_warmup += 1;
-
-                    if self.signal_warmup == 1 {
-                        // First MACD value
-                        self.signal_value = macd;
-                    } else {
-                        // Accumulate for initial SMA
-                        self.signal_value += macd;
-                    }
-
-                    if self.signal_warmup < self.config.signal_period {
-                        let output = MACDOutput {
-                            macd,
-                            signal: f64::NAN,
-                            histogram: f64::NAN,
-                        };
-                        self.history.push(output);
-                        self.state = IndicatorState::Warming {
-                            count: self.slow_ema.warmup_period() + self.signal_warmup,
-                        };
-                        return Ok(Some(output));
-                    }
-
-                    // First valid signal (SMA)
-                    self.signal_value /= self.config.signal_period as f64;
-                }
-
-                // Apply EMA smoothing to signal
-                self.signal_value =
-                    macd * self.signal_mult + self.signal_value * (1.0 - self.signal_mult);
-
-                let output = MACDOutput {
-                    macd,
-                    signal: self.signal_value,
-                    histogram: macd - self.signal_value,
-                };
-
-                self.history.push(output);
-                self.latest = Some(output);
-                self.state = IndicatorState::Ready;
-
-                Ok(Some(output))
-            }
-            _ => {
-                // Still warming up EMAs
-                self.history.push(MACDOutput::default());
-                let count = self.fast_ema.history().len().max(self.slow_ema.history().len());
-                self.state = IndicatorState::Warming { count };
-                Ok(None)
-            }
+        if len < min_for_macd {
+            // Not enough data - still warming up
+            self.state = self.state.increment(min_for_macd);
+            return None;
         }
+
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
+
+        // Get EMA values from the internal EMAs
+        let fast = self.fast_ema.next(candles)?;
+        let slow = self.slow_ema.next(candles)?;
+
+        let output = if is_new_candle {
+            // New candle - advance signal state
+            self.compute_output(fast, slow)
+        } else {
+            // Same candle - just compute without advancing signal state
+            let macd = fast - slow;
+            if let Some(signal) = self.signal_value {
+                MACDOutput {
+                    macd,
+                    signal,
+                    histogram: macd - signal,
+                }
+            } else {
+                MACDOutput {
+                    macd,
+                    signal: f64::NAN,
+                    histogram: f64::NAN,
+                }
+            }
+        };
+
+        // Update state
+        self.latest = Some(output);
+        self.state = if self.signal_value.is_some() {
+            IndicatorState::Ready
+        } else {
+            IndicatorState::Warming {
+                count: self.signal_warmup,
+            }
+        };
+
+        // Update history
+        if is_new_candle {
+            self.history.push(output);
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            *self.history.last_mut().unwrap() = output;
+        }
+
+        Some(output)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -286,10 +293,12 @@ impl Indicator for MACD {
     fn reset(&mut self) {
         self.fast_ema.reset();
         self.slow_ema.reset();
-        self.signal_value = 0.0;
+        self.signal_value = None;
         self.signal_warmup = 0;
+        self.signal_sum = 0.0;
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -323,9 +332,17 @@ impl HistoricalIndicator for MACD {
 mod tests {
     use super::*;
 
-    fn generate_trend_data(n: usize) -> OhlcvSeries {
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 0.0))
+            .collect()
+    }
+
+    fn generate_trend_data(n: usize) -> Vec<Ohlcv> {
         let closes: Vec<f64> = (0..n).map(|i| 100.0 + (i as f64 * 0.5)).collect();
-        OhlcvSeries::from_closes(&closes)
+        candles_from_closes(&closes)
     }
 
     #[test]
@@ -376,7 +393,7 @@ mod tests {
         let mut macd = MACD::new(MACDConfig::new(3, 5, 3));
         // Downtrend
         let closes: Vec<f64> = (0..20).map(|i| 200.0 - (i as f64 * 0.5)).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let data = candles_from_closes(&closes);
 
         macd.calc(&data).unwrap();
 
@@ -390,13 +407,19 @@ mod tests {
     }
 
     #[test]
-    fn macd_streaming_update() {
+    fn macd_streaming_next() {
         let mut macd = MACD::new(MACDConfig::new(3, 5, 3));
+        let candles = generate_trend_data(20);
 
-        // Feed data one by one
-        for i in 0..20 {
-            let tick = Ohlcv::from_close(100.0 + i as f64);
-            let _ = macd.update(&tick);
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = macd.next(snapshot);
+
+            // Should get result once we have enough data
+            if i >= macd.warmup_period() {
+                assert!(result.is_some(), "Should have result at len {}", i);
+            }
         }
 
         assert!(macd.state().is_ready());
@@ -425,6 +448,45 @@ mod tests {
     }
 
     #[test]
+    fn macd_batch_vs_streaming_equivalence() {
+        let candles = generate_trend_data(30);
+        let config = MACDConfig::new(3, 5, 3);
+
+        // Batch
+        let mut batch = MACD::new(config);
+        batch.calc(&candles).unwrap();
+
+        // Streaming
+        let mut stream = MACD::new(config);
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
+        }
+
+        // Compare computed values (skip NaN)
+        let batch_valid: Vec<_> = batch
+            .history()
+            .iter()
+            .filter(|o| !o.macd.is_nan())
+            .collect();
+        let stream_valid: Vec<_> = stream
+            .history()
+            .iter()
+            .filter(|o| !o.macd.is_nan())
+            .collect();
+
+        assert_eq!(batch_valid.len(), stream_valid.len());
+
+        for (b, s) in batch_valid.iter().zip(stream_valid.iter()) {
+            assert!(
+                (b.macd - s.macd).abs() < 1e-10,
+                "MACD mismatch: batch={}, stream={}",
+                b.macd,
+                s.macd
+            );
+        }
+    }
+
+    #[test]
     fn macd_reset() {
         let mut macd = MACD::new(MACDConfig::new(3, 5, 3));
         let data = generate_trend_data(20);
@@ -435,5 +497,35 @@ mod tests {
         macd.reset();
         assert!(macd.state().is_uninitialized());
         assert_eq!(macd.len(), 0);
+        assert!(macd.latest().is_none());
+    }
+
+    #[test]
+    fn macd_insufficient_data() {
+        let mut macd = MACD::new(MACDConfig::new(12, 26, 9));
+        let candles = generate_trend_data(30);
+
+        // warmup = 26 + 9 - 1 = 34
+        let result = macd.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
+    }
+
+    #[test]
+    fn macd_parallel_safe() {
+        use std::sync::Arc;
+
+        let candles = Arc::new(generate_trend_data(50));
+
+        let mut macd1 = MACD::new(MACDConfig::new(3, 5, 3));
+        let mut macd2 = MACD::new(MACDConfig::new(3, 5, 3));
+
+        // Both can read from the same snapshot
+        let snapshot: &[Ohlcv] = &candles;
+        let r1 = macd1.next(snapshot);
+        let r2 = macd2.next(snapshot);
+
+        assert!(r1.is_some());
+        assert!(r2.is_some());
+        assert!((r1.unwrap().macd - r2.unwrap().macd).abs() < 1e-10);
     }
 }

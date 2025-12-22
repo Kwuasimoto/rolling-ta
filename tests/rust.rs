@@ -23,18 +23,19 @@ mod common;
 #[path = "rust/sma.rs"]
 mod sma;
 
+#[path = "rust/ema.rs"]
+mod ema;
+
+#[path = "rust/wma.rs"]
+mod wma;
+
+#[path = "rust/hma.rs"]
+mod hma;
+
 #[path = "rust/candles.rs"]
 mod candles;
 
 // TODO: Migrate to new Indicator trait (calc(&[Ohlcv]), next(), no update())
-// #[path = "rust/ema.rs"]
-// mod ema;
-//
-// #[path = "rust/wma.rs"]
-// mod wma;
-//
-// #[path = "rust/hma.rs"]
-// mod hma;
 //
 // #[path = "rust/rsi.rs"]
 // mod rsi;

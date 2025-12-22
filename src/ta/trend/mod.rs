@@ -2,27 +2,28 @@
 //!
 //! Indicators for identifying and following market trends.
 
+mod adx;
+mod dmi;
+mod ema;
+mod hma;
+mod ichimoku;
+mod lr;
+mod macd;
 mod sma;
-// TODO: Migrate to new Indicator trait (calc(&[Ohlcv]), next(), no update())
-// mod ema;
-// mod wma;
-// mod macd;
-// mod hma;
-// mod dmi;
-// mod adx;
-// mod lr;
+mod wma;
 
+pub use adx::{ADXOutput, ADX};
+pub use dmi::{DMIOutput, DMI};
+pub use ema::EMA;
+pub use hma::HMA;
+pub use ichimoku::{Ichimoku, IchimokuOutput};
+pub use lr::{LinearRegression, LinearRegressionForecast, LinearRegressionR2};
+pub use macd::{MACDOutput, MACD};
 pub use sma::SMA;
-// TODO: Uncomment after migration
-// pub use ema::EMA;
-// pub use wma::WMA;
-// pub use hma::HMA;
-// pub use macd::{MACD, MACDOutput};
-// pub use dmi::{DMI, DMIOutput};
-// pub use adx::{ADX, ADXOutput};
-// pub use lr::{LinearRegression, LinearRegressionR2, LinearRegressionForecast};
+pub use wma::WMA;
 
 // Re-export configs for convenience
-pub use crate::ta::config::SMAConfig;
-// TODO: Uncomment after migration
-// pub use crate::ta::config::{EMAConfig, WMAConfig, MACDConfig, HMAConfig, DMIConfig, ADXConfig, LinearRegressionConfig};
+pub use crate::ta::config::{
+    ADXConfig, DMIConfig, EMAConfig, HMAConfig, IchimokuConfig, LinearRegressionConfig, MACDConfig,
+    SMAConfig, WMAConfig,
+};

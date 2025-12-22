@@ -2,14 +2,15 @@
 //!
 //! ROC measures the percentage change in price between the current price
 //! and the price n periods ago.
-
-use std::collections::VecDeque;
+//!
+//! This indicator computes directly from `&[Ohlcv]` slices, making it suitable
+//! for SharedWindow architecture and parallel computation with Rayon.
 
 use crate::ta::{
     config::ROCConfig,
-    error::TAResult,
+    error::{TAError, TAResult},
     state::IndicatorState,
-    types::{Ohlcv, OhlcvSeries},
+    types::Ohlcv,
     HistoricalIndicator, Indicator,
 };
 
@@ -33,15 +34,12 @@ use crate::ta::{
 ///
 /// ```
 /// use rolling_ta::ta::momentum::{ROC, ROCConfig};
-/// use rolling_ta::ta::types::OhlcvSeries;
+/// use rolling_ta::ta::types::Ohlcv;
 /// use rolling_ta::ta::Indicator;
 ///
 /// let mut roc = ROC::new(ROCConfig::new(12));
-/// let data = OhlcvSeries::from_closes(&[
-///     100.0, 102.0, 104.0, 103.0, 105.0, 107.0, 106.0, 108.0,
-///     110.0, 109.0, 111.0, 113.0, 115.0, 114.0, 116.0,
-/// ]);
-/// roc.calc(&data).unwrap();
+/// let candles: Vec<Ohlcv> = (0..15).map(|i| Ohlcv::from_close(100.0 + i as f64)).collect();
+/// roc.calc(&candles).unwrap();
 ///
 /// assert!(roc.state().is_ready());
 /// ```
@@ -49,10 +47,10 @@ use crate::ta::{
 pub struct ROC {
     config: ROCConfig,
     state: IndicatorState,
-    /// Rolling window of closes for streaming updates.
-    window: VecDeque<f64>,
     history: Vec<f64>,
     latest: Option<f64>,
+    /// Track last snapshot length for next() to detect new candles
+    last_len: usize,
 }
 
 impl ROC {
@@ -61,9 +59,9 @@ impl ROC {
         Self {
             config,
             state: IndicatorState::Uninitialized,
-            window: VecDeque::with_capacity(config.period + 1),
             history: Vec::new(),
             latest: None,
+            last_len: 0,
         }
     }
 
@@ -98,66 +96,72 @@ impl Indicator for ROC {
         self.state
     }
 
-    fn calc(&mut self, data: &OhlcvSeries) -> TAResult<&mut Self> {
+    fn calc(&mut self, data: &[Ohlcv]) -> TAResult<&mut Self> {
         let period = self.config.period;
         let n = data.len();
 
-        // Reset state
-        self.history = vec![f64::NAN; n];
-        self.window.clear();
-        let closes = &data.closes;
-
-        // Calculate ROC for each point where we have enough history
-        for i in 0..n {
-            if i >= period {
-                let roc = Self::calculate_roc(closes[i], closes[i - period]);
-                self.history[i] = roc;
-            }
+        if n < period + 1 {
+            return Err(TAError::InsufficientData {
+                required: period + 1,
+                actual: n,
+            });
         }
 
-        // Populate window for streaming (last `period` closes)
-        let start = if n > period { n - period } else { 0 };
-        for i in start..n {
-            self.window.push_back(closes[i]);
+        if period == 0 {
+            return Err(TAError::InvalidPeriod(0));
+        }
+
+        // Reset state
+        self.history = vec![f64::NAN; n];
+
+        // Calculate ROC for each point where we have enough history
+        for i in period..n {
+            let current = data[i].close.0;
+            let previous = data[i - period].close.0;
+            self.history[i] = Self::calculate_roc(current, previous);
         }
 
         self.latest = self.history.last().copied().filter(|v| !v.is_nan());
+        self.last_len = n;
         self.state = IndicatorState::Ready;
 
         Ok(self)
     }
 
-    fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let close = tick.close.0;
+    fn next(&mut self, candles: &[Ohlcv]) -> Option<Self::Output> {
+        let len = candles.len();
         let period = self.config.period;
 
-        // Add current close to window
-        self.window.push_back(close);
-
-        // Check if we have enough data
-        if self.window.len() <= period {
-            // Still warming up
-            self.history.push(f64::NAN);
-            if self.state.is_uninitialized() {
-                self.state = IndicatorState::Warming {
-                    count: self.window.len(),
-                };
-            } else if let IndicatorState::Warming { count } = self.state {
-                self.state = IndicatorState::Warming { count: count + 1 };
+        if len < period + 1 {
+            // Not enough data yet
+            if len > self.last_len || self.last_len == 0 {
+                self.history.push(f64::NAN);
+                self.last_len = len;
+                self.state = IndicatorState::Warming { count: len };
             }
-            return Ok(None);
+            return None;
         }
 
-        // Remove oldest value to maintain window size
-        let old_close = self.window.pop_front().unwrap();
+        // Determine if this is a new candle or same snapshot
+        let is_new_candle = len > self.last_len || self.last_len == 0;
 
-        // Calculate ROC
-        let roc = Self::calculate_roc(close, old_close);
-        self.history.push(roc);
+        // Calculate ROC from current and period-ago closes
+        let current = candles[len - 1].close.0;
+        let previous = candles[len - 1 - period].close.0;
+        let roc = Self::calculate_roc(current, previous);
+
+        if is_new_candle {
+            self.history.push(roc);
+            self.last_len = len;
+        } else if !self.history.is_empty() {
+            // Same candle - update last value
+            *self.history.last_mut().unwrap() = roc;
+        }
+
         self.latest = Some(roc);
         self.state = IndicatorState::Ready;
 
-        Ok(Some(roc))
+        Some(roc)
     }
 
     fn latest(&self) -> Option<Self::Output> {
@@ -165,9 +169,9 @@ impl Indicator for ROC {
     }
 
     fn reset(&mut self) {
-        self.window.clear();
         self.history.clear();
         self.latest = None;
+        self.last_len = 0;
         self.state = IndicatorState::Uninitialized;
     }
 
@@ -200,12 +204,20 @@ impl HistoricalIndicator for ROC {
 mod tests {
     use super::*;
 
+    fn candles_from_closes(closes: &[f64]) -> Vec<Ohlcv> {
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Ohlcv::new(i as i64, close, close, close, close, 1000.0))
+            .collect()
+    }
+
     #[test]
     fn roc_batch_calculation() {
         let mut roc = ROC::new(ROCConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[100.0, 102.0, 104.0, 106.0, 108.0, 110.0]);
+        let candles = candles_from_closes(&[100.0, 102.0, 104.0, 106.0, 108.0, 110.0]);
 
-        roc.calc(&data).unwrap();
+        roc.calc(&candles).unwrap();
 
         assert!(roc.state().is_ready());
         assert_eq!(roc.len(), 6);
@@ -229,41 +241,49 @@ mod tests {
     }
 
     #[test]
-    fn roc_streaming_update() {
+    fn roc_streaming_next() {
         let mut roc = ROC::new(ROCConfig::new(3));
+        let candles = candles_from_closes(&[100.0, 102.0, 104.0, 106.0, 108.0, 110.0]);
 
-        // Warmup - first 3 ticks
-        assert!(roc.update(&Ohlcv::from_close(100.0)).unwrap().is_none());
-        assert!(roc.update(&Ohlcv::from_close(102.0)).unwrap().is_none());
-        assert!(roc.update(&Ohlcv::from_close(104.0)).unwrap().is_none());
+        // Feed growing snapshots
+        for i in 1..=candles.len() {
+            let snapshot = &candles[..i];
+            let result = roc.next(snapshot);
 
-        // Fourth tick - should get first ROC
-        let result = roc.update(&Ohlcv::from_close(106.0)).unwrap();
-        assert!(result.is_some());
-        let roc_val = result.unwrap();
-        // (106 - 100) / 100 * 100 = 6%
-        assert!((roc_val - 6.0).abs() < 0.0001);
+            // Should get result when we have period + 1 = 4 candles
+            if i >= 4 {
+                assert!(result.is_some(), "Should have result at len {}", i);
+            }
+        }
+
+        assert!(roc.state().is_ready());
+
+        // Verify final values match expected
+        // ROC at index 3: (106 - 100) / 100 * 100 = 6%
+        let roc3 = roc.get(3).unwrap();
+        assert!((roc3 - 6.0).abs() < 0.0001);
     }
 
     #[test]
-    fn roc_streaming_matches_batch() {
+    fn roc_batch_vs_streaming_equivalence() {
         let closes = vec![100.0, 102.0, 104.0, 106.0, 108.0, 110.0, 108.0, 106.0];
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
+        let config = ROCConfig::new(3);
 
         // Batch
-        let mut batch_roc = ROC::new(ROCConfig::new(3));
-        batch_roc.calc(&data).unwrap();
+        let mut batch = ROC::new(config);
+        batch.calc(&candles).unwrap();
 
         // Streaming
-        let mut stream_roc = ROC::new(ROCConfig::new(3));
-        for close in &closes {
-            stream_roc.update(&Ohlcv::from_close(*close)).unwrap();
+        let mut stream = ROC::new(config);
+        for i in 1..=candles.len() {
+            stream.next(&candles[..i]);
         }
 
-        assert_eq!(batch_roc.len(), stream_roc.len());
-        for i in 0..batch_roc.len() {
-            let batch_val = batch_roc.get(i as isize).unwrap();
-            let stream_val = stream_roc.get(i as isize).unwrap();
+        assert_eq!(batch.len(), stream.len());
+        for i in 0..batch.len() {
+            let batch_val = batch.get(i as isize).unwrap();
+            let stream_val = stream.get(i as isize).unwrap();
 
             if batch_val.is_nan() && stream_val.is_nan() {
                 continue;
@@ -283,9 +303,9 @@ mod tests {
         let mut roc = ROC::new(ROCConfig::new(5));
         // Strong uptrend: 100 -> 120 (20% increase)
         let closes: Vec<f64> = (0..10).map(|i| 100.0 + (i as f64 * 2.0)).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        roc.calc(&data).unwrap();
+        roc.calc(&candles).unwrap();
 
         let latest = roc.latest().unwrap();
         // Should be positive in uptrend
@@ -297,9 +317,9 @@ mod tests {
         let mut roc = ROC::new(ROCConfig::new(5));
         // Strong downtrend: 120 -> 100 (16.7% decrease)
         let closes: Vec<f64> = (0..10).map(|i| 120.0 - (i as f64 * 2.0)).collect();
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        roc.calc(&data).unwrap();
+        roc.calc(&candles).unwrap();
 
         let latest = roc.latest().unwrap();
         // Should be negative in downtrend
@@ -311,9 +331,9 @@ mod tests {
         let mut roc = ROC::new(ROCConfig::new(5));
         // Flat market
         let closes = vec![100.0; 10];
-        let data = OhlcvSeries::from_closes(&closes);
+        let candles = candles_from_closes(&closes);
 
-        roc.calc(&data).unwrap();
+        roc.calc(&candles).unwrap();
 
         let latest = roc.latest().unwrap();
         // Should be zero in flat market
@@ -327,9 +347,9 @@ mod tests {
     #[test]
     fn roc_reset() {
         let mut roc = ROC::new(ROCConfig::new(3));
-        let data = OhlcvSeries::from_closes(&[100.0, 102.0, 104.0, 106.0]);
+        let candles = candles_from_closes(&[100.0, 102.0, 104.0, 106.0]);
 
-        roc.calc(&data).unwrap();
+        roc.calc(&candles).unwrap();
         assert!(roc.state().is_ready());
         assert_eq!(roc.len(), 4);
 
@@ -337,5 +357,14 @@ mod tests {
         assert!(roc.state().is_uninitialized());
         assert_eq!(roc.len(), 0);
         assert!(roc.latest().is_none());
+    }
+
+    #[test]
+    fn roc_insufficient_data() {
+        let mut roc = ROC::new(ROCConfig::new(12));
+        let candles = candles_from_closes(&[100.0; 10]);
+
+        let result = roc.calc(&candles);
+        assert!(matches!(result, Err(TAError::InsufficientData { .. })));
     }
 }

@@ -29,37 +29,24 @@ impl SMAConfig {
 }
 
 /// Exponential Moving Average configuration.
+///
+/// EMA computes directly from `&[Ohlcv]` slices and does not own a window.
+/// Temporal candle management is handled by `CandleBuilder`, not the indicator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EMAConfig {
     pub period: usize,
-    /// Timeframe in seconds for temporal candle management (0 = disabled).
-    /// When enabled, multiple ticks within the same candle period will
-    /// update the latest value instead of pushing a new one.
-    pub timeframe: i64,
 }
 
 impl Default for EMAConfig {
     fn default() -> Self {
-        Self {
-            period: 14,
-            timeframe: 0,
-        }
+        Self { period: 14 }
     }
 }
 
 impl EMAConfig {
-    /// Create a new EMA config with period (temporal mode disabled).
+    /// Create a new EMA config with period.
     pub fn new(period: usize) -> Self {
-        Self { period, timeframe: 0 }
-    }
-
-    /// Create a new EMA config with period and timeframe for temporal mode.
-    ///
-    /// # Arguments
-    /// * `period` - Number of periods for the moving average
-    /// * `timeframe` - Timeframe in seconds (60=1m, 300=5m, 900=15m)
-    pub fn with_timeframe(period: usize, timeframe: i64) -> Self {
-        Self { period, timeframe }
+        Self { period }
     }
 
     /// EMA multiplier: 2 / (period + 1)
@@ -70,37 +57,24 @@ impl EMAConfig {
 }
 
 /// Weighted Moving Average configuration.
+///
+/// WMA computes directly from `&[Ohlcv]` slices and does not own a window.
+/// Temporal candle management is handled by `CandleBuilder`, not the indicator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WMAConfig {
     pub period: usize,
-    /// Timeframe in seconds for temporal candle management (0 = disabled).
-    /// When enabled, multiple ticks within the same candle period will
-    /// update the latest value instead of pushing a new one.
-    pub timeframe: i64,
 }
 
 impl Default for WMAConfig {
     fn default() -> Self {
-        Self {
-            period: 14,
-            timeframe: 0,
-        }
+        Self { period: 14 }
     }
 }
 
 impl WMAConfig {
-    /// Create a new WMA config with period (temporal mode disabled).
+    /// Create a new WMA config with period.
     pub fn new(period: usize) -> Self {
-        Self { period, timeframe: 0 }
-    }
-
-    /// Create a new WMA config with period and timeframe for temporal mode.
-    ///
-    /// # Arguments
-    /// * `period` - Number of periods for the moving average
-    /// * `timeframe` - Timeframe in seconds (60=1m, 300=5m, 900=15m)
-    pub fn with_timeframe(period: usize, timeframe: i64) -> Self {
-        Self { period, timeframe }
+        Self { period }
     }
 
     /// Sum of weights: period * (period + 1) / 2
@@ -199,6 +173,17 @@ pub struct StochRSIConfig {
     pub d_smoothing: usize,
 }
 
+impl StochRSIConfig {
+    pub fn new(rsi_period: usize, stoch_period: usize, k_smoothing: usize, d_smoothing: usize) -> Self {
+        Self {
+            rsi_period,
+            stoch_period,
+            k_smoothing,
+            d_smoothing,
+        }
+    }
+}
+
 impl Default for StochRSIConfig {
     fn default() -> Self {
         Self {
@@ -213,7 +198,14 @@ impl Default for StochRSIConfig {
 /// Balance of Power configuration.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BOPConfig {
+    /// Smoothing period (SMA). 0 or 1 means no smoothing.
     pub smoothing: usize,
+}
+
+impl BOPConfig {
+    pub fn new(smoothing: usize) -> Self {
+        Self { smoothing }
+    }
 }
 
 impl Default for BOPConfig {
@@ -294,6 +286,13 @@ pub struct DonchianConfig {
     pub period: usize,
 }
 
+impl DonchianConfig {
+    /// Create a new Donchian configuration.
+    pub fn new(period: usize) -> Self {
+        Self { period }
+    }
+}
+
 impl Default for DonchianConfig {
     fn default() -> Self {
         Self { period: 20 }
@@ -314,9 +313,33 @@ pub struct MFIConfig {
     pub period: usize,
 }
 
+impl MFIConfig {
+    pub fn new(period: usize) -> Self {
+        Self { period }
+    }
+}
+
 impl Default for MFIConfig {
     fn default() -> Self {
         Self { period: 14 }
+    }
+}
+
+/// Chaikin Money Flow configuration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CMFConfig {
+    pub period: usize,
+}
+
+impl CMFConfig {
+    pub fn new(period: usize) -> Self {
+        Self { period }
+    }
+}
+
+impl Default for CMFConfig {
+    fn default() -> Self {
+        Self { period: 20 }
     }
 }
 

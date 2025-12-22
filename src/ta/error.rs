@@ -32,6 +32,10 @@ pub enum TAError {
     /// Index out of bounds.
     #[error("index {index} out of bounds (len: {len})")]
     IndexOutOfBounds { index: isize, len: usize },
+
+    /// Invalid indicator ID.
+    #[error("invalid indicator ID: indicator not found")]
+    InvalidId,
 }
 
 /// Result type alias for TA operations.

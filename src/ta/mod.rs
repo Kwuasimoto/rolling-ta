@@ -4,6 +4,7 @@
 
 pub mod config;
 pub mod error;
+pub mod manager;
 pub mod math;
 pub mod state;
 pub mod temporal;
@@ -11,11 +12,10 @@ pub mod types;
 pub mod utils;
 
 // Indicator categories
+pub mod momentum;
 pub mod trend;
-// TODO: Migrate to new Indicator trait (calc(&[Ohlcv]), next(), no update())
-// pub mod momentum;
-// pub mod volatility;
-// pub mod volume;
+pub mod volatility;
+pub mod volume;
 
 use error::TAResult;
 use state::IndicatorState;

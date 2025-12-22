@@ -1,28 +1,28 @@
 //! WMA reference tests.
 //!
 //! Verifies WMA implementation against Python rolling-ta output.
-//! Tests batch, streaming, and hybrid modes in a single consolidated test.
+//! Tests batch mode and streaming mode (via next()).
 
 use crate::common::{
-    assert_histories_equal, build_ohlcv_from_closes, compare_values, read_xlsx_by_position,
-    slice_ohlcv, tick_at, EPSILON,
+    assert_histories_equal, build_candles_from_closes, compare_values, read_xlsx_by_position,
+    EPSILON,
 };
 use rolling_ta::prelude::*;
 use rolling_ta::trend::{WMA, WMAConfig};
 
 #[test]
-fn wma_modes_equivalent() {
+fn wma_batch_vs_reference() {
     // btc-wma.xlsx: timestamp(0), close(1), weights(2), weighted_sum(3), wma(4)
     let cols = read_xlsx_by_position("resources/data/btc-wma.xlsx", &[1, 4]);
     let closes = &cols[0];
     let expected = &cols[1];
-    let data = build_ohlcv_from_closes(closes);
+    let candles = build_candles_from_closes(closes);
 
-    // 1. Batch calculation (also validates against Python reference)
-    let mut batch = WMA::new(WMAConfig::new(14));
-    batch.calc(&data).unwrap();
+    // Batch calculation (validates against Python reference)
+    let mut wma = WMA::new(WMAConfig::new(14));
+    wma.calc(&candles).unwrap();
 
-    let comparisons = compare_values("WMA batch vs reference", batch.history(), expected, EPSILON);
+    let comparisons = compare_values("WMA batch vs reference", wma.history(), expected, EPSILON);
     println!(
         "WMA: {} values compared against Python reference",
         comparisons
@@ -32,23 +32,79 @@ fn wma_modes_equivalent() {
         "Should have compared many values, got {}",
         comparisons
     );
+}
 
-    // 2. Full streaming (tests update() from scratch, including warmup)
-    let mut stream = WMA::new(WMAConfig::new(14));
-    for i in 0..data.len() {
-        stream.update(&tick_at(&data, i)).unwrap();
+#[test]
+fn wma_streaming_next_vs_batch() {
+    // btc-wma.xlsx: timestamp(0), close(1), weights(2), weighted_sum(3), wma(4)
+    let cols = read_xlsx_by_position("resources/data/btc-wma.xlsx", &[1, 4]);
+    let closes = &cols[0];
+    let candles = build_candles_from_closes(closes);
+
+    let period = 14;
+
+    // 1. Batch calculation - history includes NaN for warmup period
+    let mut batch = WMA::new(WMAConfig::new(period));
+    batch.calc(&candles).unwrap();
+
+    // 2. Streaming via next() - simulates SharedWindow snapshot pattern
+    // Each call to next() receives a growing snapshot
+    // Note: next() only pushes to history when returning Some (not during warmup)
+    let mut stream = WMA::new(WMAConfig::new(period));
+    for i in 1..=candles.len() {
+        let snapshot = &candles[..i];
+        stream.next(snapshot);
     }
 
-    // 3. Hybrid: 50% batch + 50% streaming (tests calc-to-update transition)
-    let half = data.len() / 2;
-    let mut hybrid = WMA::new(WMAConfig::new(14));
-    hybrid.calc(&slice_ohlcv(&data, 0, half)).unwrap();
-    for i in half..data.len() {
-        hybrid.update(&tick_at(&data, i)).unwrap();
-    }
+    // History formats differ:
+    // - batch.history(): [NaN × (period-1), val1, val2, ...] (length = candles.len())
+    // - stream.history(): [val1, val2, ...] (length = candles.len() - period + 1)
+    //
+    // Compare computed values only (skip NaN warmup from batch)
+    let batch_computed: Vec<f64> = batch.history().iter().filter(|v| !v.is_nan()).copied().collect();
+    let stream_computed = stream.history();
 
-    // All three modes must produce identical results
+    assert_eq!(
+        batch_computed.len(),
+        stream_computed.len(),
+        "Computed value count should match"
+    );
+
     let epsilon = 1e-6;
-    assert_histories_equal("WMA batch vs stream", batch.history(), stream.history(), epsilon);
-    assert_histories_equal("WMA batch vs hybrid", batch.history(), hybrid.history(), epsilon);
+    assert_histories_equal("WMA batch vs stream", &batch_computed, stream_computed, epsilon);
+}
+
+#[test]
+fn wma_next_with_fixed_window() {
+    // Simulates SharedWindow pattern where snapshot size is limited
+    // This is how IndicatorManager would call next()
+    let cols = read_xlsx_by_position("resources/data/btc-wma.xlsx", &[1, 4]);
+    let closes = &cols[0];
+    let expected = &cols[1];
+    let candles = build_candles_from_closes(closes);
+
+    let period = 14;
+    let mut wma = WMA::new(WMAConfig::new(period));
+
+    // Feed snapshots of exactly `period` candles (like SharedWindow.snapshot_last(14))
+    // WMA only needs the last N candles, so fixed window works
+    for i in period..candles.len() {
+        let snapshot = &candles[i - period + 1..=i];
+        let result = wma.next(snapshot);
+
+        // Should always produce a value once we have enough data
+        assert!(result.is_some(), "Should have result at index {}", i);
+
+        // Compare against Python reference
+        let rust_val = result.unwrap();
+        let true_val = expected[i];
+        if !rust_val.is_nan() && !true_val.is_nan() {
+            let diff = (rust_val - true_val).abs();
+            assert!(
+                diff < EPSILON,
+                "WMA mismatch at index {}: Rust={:.6}, Expected={:.6}, diff={:.6}",
+                i, rust_val, true_val, diff
+            );
+        }
+    }
 }
