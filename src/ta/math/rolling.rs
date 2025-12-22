@@ -2,6 +2,8 @@
 
 use std::collections::VecDeque;
 
+use crate::prelude::Ohlcv;
+
 /// Temporal state for candle period detection.
 ///
 /// Encapsulates timeframe interval and tracks the last processed timestamp.
@@ -88,9 +90,9 @@ impl Temporal {
 /// Optionally supports temporal candle management via the `Temporal` field.
 #[derive(Debug, Clone)]
 pub struct RollingWindow {
-    buffer: VecDeque<f64>,
+    buffer: VecDeque<Ohlcv>,
     capacity: usize,
-    sum: f64,
+    sum: f64, // Of close values for n capacity
     temporal: Temporal,
 }
 
@@ -120,58 +122,58 @@ impl RollingWindow {
         }
     }
 
-    /// Push a value, removing oldest if at capacity.
-    /// Returns the removed value if any.
+    /// Push a candle, removing oldest if at capacity.
+    /// Returns the removed candle if any.
     ///
     /// Note: This ignores temporal state. For temporal-aware operations,
     /// use `push_with_timestamp()` instead.
     #[inline]
-    pub fn push(&mut self, value: f64) -> Option<f64> {
-        self.sum += value;
+    pub fn push(&mut self, candle: Ohlcv) -> Option<Ohlcv> {
+        self.sum += candle.close.0;
 
         if self.buffer.len() >= self.capacity {
             let removed = self.buffer.pop_front().unwrap();
-            self.sum -= removed;
-            self.buffer.push_back(value);
+            self.sum -= removed.close.0;
+            self.buffer.push_back(candle);
             Some(removed)
         } else {
-            self.buffer.push_back(value);
+            self.buffer.push_back(candle);
             None
         }
     }
 
-    /// Update the most recent value (back of window).
+    /// Update the most recent candle (back of window).
     ///
     /// Adjusts cached sum accordingly. Used for updating a candle
     /// that is still forming (same time period).
     ///
-    /// Returns the old value, or `None` if window is empty.
+    /// Returns the old candle, or `None` if window is empty.
     #[inline]
-    pub fn update_back(&mut self, new_value: f64) -> Option<f64> {
+    pub fn update_back(&mut self, new_candle: Ohlcv) -> Option<Ohlcv> {
         if let Some(back) = self.buffer.back_mut() {
             let old = *back;
-            self.sum = self.sum - old + new_value;
-            *back = new_value;
+            self.sum = self.sum - old.close.0 + new_candle.close.0;
+            *back = new_candle;
             Some(old)
         } else {
             None
         }
     }
 
-    /// Process a value with timestamp (push or update based on period).
+    /// Process a candle with timestamp (push or update based on period).
     ///
     /// If temporal mode is enabled and the timestamp is in the same
-    /// period as the last recorded timestamp, updates the latest value.
-    /// Otherwise, pushes a new value.
+    /// period as the last recorded timestamp, updates the latest candle.
+    /// Otherwise, pushes a new candle.
     ///
     /// Returns `true` if pushed (new candle), `false` if updated (same candle).
-    pub fn push_with_timestamp(&mut self, timestamp: i64, value: f64) -> bool {
-        if self.temporal.is_same_period(timestamp) {
-            self.update_back(value);
+    pub fn push_with_timestamp(&mut self, candle: Ohlcv) -> bool {
+        if self.temporal.is_same_period(candle.timestamp.0) {
+            self.update_back(candle);
             false
         } else {
-            self.push(value);
-            self.temporal.record(timestamp);
+            self.push(candle);
+            self.temporal.record(candle.timestamp.0);
             true
         }
     }
@@ -218,19 +220,19 @@ impl RollingWindow {
 
     /// Get the oldest value.
     #[inline]
-    pub fn front(&self) -> Option<f64> {
+    pub fn front(&self) -> Option<Ohlcv> {
         self.buffer.front().copied()
     }
 
     /// Get the newest value.
     #[inline]
-    pub fn back(&self) -> Option<f64> {
+    pub fn back(&self) -> Option<Ohlcv> {
         self.buffer.back().copied()
     }
 
     /// Get value at index.
     #[inline]
-    pub fn get(&self, index: usize) -> Option<f64> {
+    pub fn get(&self, index: usize) -> Option<Ohlcv> {
         self.buffer.get(index).copied()
     }
 
@@ -242,16 +244,16 @@ impl RollingWindow {
     }
 
     /// Iterate over values from oldest to newest.
-    pub fn iter(&self) -> impl Iterator<Item = f64> + '_ {
+    pub fn iter(&self) -> impl Iterator<Item = Ohlcv> + '_ {
         self.buffer.iter().copied()
     }
 
     /// Get as slice (may not be contiguous).
-    pub fn as_slices(&self) -> (&[f64], &[f64]) {
+    pub fn as_slices(&self) -> (&[Ohlcv], &[Ohlcv]) {
         self.buffer.as_slices()
     }
 
-    pub fn to_vec(&self) -> Vec<f64> {
+    pub fn to_vec(&self) -> Vec<Ohlcv> {
         self.buffer.iter().cloned().collect()
     }
 

@@ -29,20 +29,26 @@ With single:
 
 ## Migration Status
 
-| Indicator | Consolidated | Migrated | Notes |
-|-----------|--------------|----------|-------|
-| SMA | Yes | Yes | `rust/sma.rs` |
-| EMA | Yes | Yes | `rust/ema.rs` |
-| WMA | Yes | Yes | `rust/wma.rs` |
-| HMA | Yes | Yes | `rust/hma.rs` |
-| RSI | Yes | Yes | `rust/rsi.rs` |
-| BB | Yes | Yes | `rust/bb.rs` (compound: upper/middle/lower) |
-| ATR | Yes | Yes | `rust/atr.rs` (includes TR validation) |
-| OBV | Yes | Yes | `rust/obv.rs` (uses relative error for large values) |
-| ADX | Yes | Yes | `rust/adx.rs` (compound: plus_di/minus_di/dx/adx) |
-| LinearRegression | Yes | Yes | `rust/lr.rs` (LR, LR2, LRF + optimized_path) |
-| VWAP | Yes | Yes | `rust/vwap.rs` (uses timestamps for reset interval) |
-| ROC | Yes | Yes | `rust/roc.rs` |
+| Indicator | Consolidated | Migrated | Temporalized | Notes |
+|-----------|--------------|----------|--------------|-------|
+| SMA | Yes | Yes | Yes | `rust/sma.rs` |
+| EMA | Yes | Yes | Yes | `rust/ema.rs` |
+| WMA | Yes | Yes | Yes | `rust/wma.rs` |
+| HMA | Yes | Yes | No | `rust/hma.rs` |
+| RSI | Yes | Yes | No | `rust/rsi.rs` |
+| BB | Yes | Yes | No | `rust/bb.rs` (compound: upper/middle/lower) |
+| ATR | Yes | Yes | No | `rust/atr.rs` (includes TR validation) |
+| OBV | Yes | Yes | No | `rust/obv.rs` (uses relative error for large values) |
+| ADX | Yes | Yes | No | `rust/adx.rs` (compound: plus_di/minus_di/dx/adx) |
+| LinearRegression | Yes | Yes | No | `rust/lr.rs` (LR, LR2, LRF + optimized_path) |
+| VWAP | Yes | Yes | No | `rust/vwap.rs` (uses timestamps for reset interval) |
+| ROC | Yes | Yes | No | `rust/roc.rs` |
+
+### Temporalization
+
+Temporalized indicators support real-time tick aggregation via `Config::with_timeframe(period, timeframe)`.
+When enabled, multiple ticks within the same candle period update the latest value in place
+instead of pushing new history entries.
 
 ## Shared Helpers (tests/rust/common.rs)
 

@@ -44,7 +44,8 @@
       "Bash(npx @anthropic-ai/linear-mcp-server)",
       "mcp__linear-server__list_comments",
       "mcp__fetch__fetch",
-      "mcp__linear-server__create_comment"
+      "mcp__linear-server__create_comment",
+      "Bash(cargo test:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -34,9 +34,9 @@ use crate::ta::{
 pub struct SMA {
     config: SMAConfig,
     state: IndicatorState,
-    window: RollingWindow,
     history: Vec<f64>,
     latest: Option<f64>,
+    window: RollingWindow,
 }
 
 impl SMA {
@@ -49,11 +49,11 @@ impl SMA {
         };
 
         Self {
-            window,
             config,
             state: IndicatorState::Uninitialized,
             history: Vec::new(),
             latest: None,
+            window,
         }
     }
 
@@ -104,15 +104,14 @@ impl Indicator for SMA {
             return Err(TAError::InvalidPeriod(0));
         }
 
-        // Reset state
-        self.window = RollingWindow::new(period);
+        // Reset window (preserves capacity and temporal config)
+        self.window.clear();
         self.history = Vec::with_capacity(data.len());
-
-        let closes = &data.closes;
 
         // Build initial window
         for i in 0..period {
-            self.window.push(closes[i]);
+            let candle = data.get(i).unwrap();
+            self.window.push(candle);
             self.history.push(f64::NAN);
         }
 
@@ -121,8 +120,9 @@ impl Indicator for SMA {
         self.history[period - 1] = first_sma;
 
         // Rolling calculation
-        for i in period..closes.len() {
-            self.window.push(closes[i]);
+        for i in period..data.len() {
+            let candle = data.get(i).unwrap();
+            self.window.push(candle);
             let sma = self.window.mean();
             self.history.push(sma);
         }
@@ -134,11 +134,8 @@ impl Indicator for SMA {
     }
 
     fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
-        let close = tick.close.0;
-        let timestamp = tick.timestamp.0;
-
-        // Use temporal-aware push if timeframe is enabled
-        let is_new_candle = self.window.push_with_timestamp(timestamp, close);
+        // Use temporal-aware push (handles both new candle and same-period update)
+        let is_new_candle = self.window.push_with_timestamp(*tick);
 
         if is_new_candle {
             // New candle: increment state and append to history
@@ -175,11 +172,7 @@ impl Indicator for SMA {
     }
 
     fn reset(&mut self) {
-        self.window = if self.config.timeframe > 0 {
-            RollingWindow::with_timeframe(self.config.period, self.config.timeframe)
-        } else {
-            RollingWindow::new(self.config.period)
-        };
+        self.window.clear();
         self.history.clear();
         self.latest = None;
         self.state = IndicatorState::Uninitialized;

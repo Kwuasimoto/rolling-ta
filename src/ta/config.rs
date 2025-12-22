@@ -45,17 +45,34 @@ impl SMAConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct EMAConfig {
     pub period: usize,
+    /// Timeframe in seconds for temporal candle management (0 = disabled).
+    /// When enabled, multiple ticks within the same candle period will
+    /// update the latest value instead of pushing a new one.
+    pub timeframe: i64,
 }
 
 impl Default for EMAConfig {
     fn default() -> Self {
-        Self { period: 14 }
+        Self {
+            period: 14,
+            timeframe: 0,
+        }
     }
 }
 
 impl EMAConfig {
+    /// Create a new EMA config with period (temporal mode disabled).
     pub fn new(period: usize) -> Self {
-        Self { period }
+        Self { period, timeframe: 0 }
+    }
+
+    /// Create a new EMA config with period and timeframe for temporal mode.
+    ///
+    /// # Arguments
+    /// * `period` - Number of periods for the moving average
+    /// * `timeframe` - Timeframe in seconds (60=1m, 300=5m, 900=15m)
+    pub fn with_timeframe(period: usize, timeframe: i64) -> Self {
+        Self { period, timeframe }
     }
 
     /// EMA multiplier: 2 / (period + 1)
@@ -69,17 +86,34 @@ impl EMAConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WMAConfig {
     pub period: usize,
+    /// Timeframe in seconds for temporal candle management (0 = disabled).
+    /// When enabled, multiple ticks within the same candle period will
+    /// update the latest value instead of pushing a new one.
+    pub timeframe: i64,
 }
 
 impl Default for WMAConfig {
     fn default() -> Self {
-        Self { period: 14 }
+        Self {
+            period: 14,
+            timeframe: 0,
+        }
     }
 }
 
 impl WMAConfig {
+    /// Create a new WMA config with period (temporal mode disabled).
     pub fn new(period: usize) -> Self {
-        Self { period }
+        Self { period, timeframe: 0 }
+    }
+
+    /// Create a new WMA config with period and timeframe for temporal mode.
+    ///
+    /// # Arguments
+    /// * `period` - Number of periods for the moving average
+    /// * `timeframe` - Timeframe in seconds (60=1m, 300=5m, 900=15m)
+    pub fn with_timeframe(period: usize, timeframe: i64) -> Self {
+        Self { period, timeframe }
     }
 
     /// Sum of weights: period * (period + 1) / 2

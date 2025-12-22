@@ -5,6 +5,7 @@ use std::collections::VecDeque;
 use crate::ta::{
     config::WMAConfig,
     error::{TAError, TAResult},
+    math::Temporal,
     state::IndicatorState,
     types::{Ohlcv, OhlcvSeries},
     Indicator, HistoricalIndicator,
@@ -39,12 +40,20 @@ pub struct WMA {
     window: VecDeque<f64>,
     history: Vec<f64>,
     latest: Option<f64>,
+    /// Temporal state for candle period detection.
+    temporal: Temporal,
 }
 
 impl WMA {
     /// Create a new WMA indicator with the given configuration.
     pub fn new(config: WMAConfig) -> Self {
         let weight_sum = config.weight_sum();
+        let temporal = if config.timeframe > 0 {
+            Temporal::new(config.timeframe)
+        } else {
+            Temporal::disabled()
+        };
+
         Self {
             config,
             state: IndicatorState::Uninitialized,
@@ -52,6 +61,7 @@ impl WMA {
             window: VecDeque::with_capacity(config.period),
             history: Vec::new(),
             latest: None,
+            temporal,
         }
     }
 
@@ -59,6 +69,18 @@ impl WMA {
     #[inline]
     pub fn period(&self) -> usize {
         self.config.period
+    }
+
+    /// Get the timeframe (0 = temporal mode disabled).
+    #[inline]
+    pub fn timeframe(&self) -> i64 {
+        self.config.timeframe
+    }
+
+    /// Check if temporal mode is enabled.
+    #[inline]
+    pub fn is_temporal(&self) -> bool {
+        self.config.timeframe > 0
     }
 
     /// Calculate WMA from current window.
@@ -131,23 +153,49 @@ impl Indicator for WMA {
 
     fn update(&mut self, tick: &Ohlcv) -> TAResult<Option<Self::Output>> {
         let close = tick.close.0;
+        let timestamp = tick.timestamp.0;
         let period = self.config.period;
 
-        if self.window.len() >= period {
-            self.window.pop_front();
-        }
-        self.window.push_back(close);
+        // Check if this is a same-candle update (temporal mode)
+        let is_same_period = self.temporal.is_same_period(timestamp);
 
-        self.state = self.state.increment(period);
+        if is_same_period {
+            // Same candle period - update the back of the window in place
+            if let Some(back) = self.window.back_mut() {
+                *back = close;
+            }
 
-        if self.state.is_ready() {
-            let wma = self.calculate_wma();
-            self.history.push(wma);
-            self.latest = Some(wma);
-            Ok(Some(wma))
+            if self.state.is_ready() {
+                let wma = self.calculate_wma();
+                // Update last history entry in place
+                if let Some(last) = self.history.last_mut() {
+                    *last = wma;
+                }
+                self.latest = Some(wma);
+                Ok(Some(wma))
+            } else {
+                Ok(None)
+            }
         } else {
-            self.history.push(f64::NAN);
-            Ok(None)
+            // New candle period - normal update path
+            self.temporal.record(timestamp);
+
+            if self.window.len() >= period {
+                self.window.pop_front();
+            }
+            self.window.push_back(close);
+
+            self.state = self.state.increment(period);
+
+            if self.state.is_ready() {
+                let wma = self.calculate_wma();
+                self.history.push(wma);
+                self.latest = Some(wma);
+                Ok(Some(wma))
+            } else {
+                self.history.push(f64::NAN);
+                Ok(None)
+            }
         }
     }
 
@@ -160,6 +208,7 @@ impl Indicator for WMA {
         self.history.clear();
         self.latest = None;
         self.state = IndicatorState::Uninitialized;
+        self.temporal.reset();
     }
 
     fn warmup_period(&self) -> usize {
@@ -240,5 +289,119 @@ mod tests {
         let wma = WMA::new(WMAConfig::new(5));
         // 1+2+3+4+5 = 15
         assert_eq!(wma.weight_sum, 15);
+    }
+
+    // Temporal tests
+
+    #[test]
+    fn wma_temporal_config() {
+        // Non-temporal (default)
+        let wma = WMA::new(WMAConfig::new(14));
+        assert!(!wma.is_temporal());
+        assert_eq!(wma.timeframe(), 0);
+
+        // Temporal mode
+        let wma = WMA::new(WMAConfig::with_timeframe(14, 60));
+        assert!(wma.is_temporal());
+        assert_eq!(wma.timeframe(), 60);
+    }
+
+    #[test]
+    fn wma_temporal_same_period_updates_in_place() {
+        // 1-minute timeframe (60 seconds), period 3
+        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 60));
+
+        // Warmup with different candle periods
+        // Period 16: timestamp 960
+        wma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
+        assert_eq!(wma.len(), 1);
+
+        // Period 17: timestamp 1020
+        wma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
+        assert_eq!(wma.len(), 2);
+
+        // Period 18: timestamp 1080 - this should be ready
+        // WMA = (1×1 + 2×2 + 3×3) / 6 = 14/6 ≈ 2.333
+        let result = wma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+        assert!(result.is_some());
+        assert!((result.unwrap() - 2.333).abs() < 0.01);
+        assert_eq!(wma.len(), 3);
+
+        // Same period (still 18): timestamp 1100 - should update in place
+        // Window is now [1, 2, 6], WMA = (1×1 + 2×2 + 6×3) / 6 = 23/6 ≈ 3.833
+        let result = wma.update(&Ohlcv::new(1100, 6.0, 6.0, 6.0, 6.0, 0.0)).unwrap();
+        assert!(result.is_some());
+        assert!((result.unwrap() - 3.833).abs() < 0.01);
+        assert_eq!(wma.len(), 3); // Still 3, not 4!
+
+        // Same period again: timestamp 1110 - should update in place again
+        // Window is now [1, 2, 9], WMA = (1×1 + 2×2 + 9×3) / 6 = 32/6 ≈ 5.333
+        let result = wma.update(&Ohlcv::new(1110, 9.0, 9.0, 9.0, 9.0, 0.0)).unwrap();
+        assert!(result.is_some());
+        assert!((result.unwrap() - 5.333).abs() < 0.01);
+        assert_eq!(wma.len(), 3); // Still 3!
+    }
+
+    #[test]
+    fn wma_temporal_new_period_pushes() {
+        // 5-minute timeframe (300 seconds)
+        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 300));
+
+        // Period 3: timestamps 900-1199
+        wma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
+        wma.update(&Ohlcv::new(1100, 1.5, 1.5, 1.5, 1.5, 0.0)).unwrap(); // Same period, updates
+        assert_eq!(wma.len(), 1);
+
+        // Period 4: timestamps 1200-1499
+        wma.update(&Ohlcv::new(1200, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
+        assert_eq!(wma.len(), 2);
+
+        // Period 5: timestamps 1500-1799 - should be ready
+        // Window: [1.5, 2.0, 3.0], WMA = (1.5×1 + 2.0×2 + 3.0×3) / 6 = 14.5/6 ≈ 2.417
+        let result = wma.update(&Ohlcv::new(1500, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+        assert!(result.is_some());
+        assert!((result.unwrap() - 2.417).abs() < 0.01);
+        assert_eq!(wma.len(), 3);
+
+        // Period 6: timestamp 1800 - new period
+        // Window: [2.0, 3.0, 4.0], WMA = (2×1 + 3×2 + 4×3) / 6 = 20/6 ≈ 3.333
+        let result = wma.update(&Ohlcv::new(1800, 4.0, 4.0, 4.0, 4.0, 0.0)).unwrap();
+        assert!(result.is_some());
+        assert!((result.unwrap() - 3.333).abs() < 0.01);
+        assert_eq!(wma.len(), 4);
+    }
+
+    #[test]
+    fn wma_non_temporal_always_pushes() {
+        // Non-temporal mode (timeframe = 0)
+        let mut wma = WMA::new(WMAConfig::new(3));
+
+        // All at same timestamp - should still push each one
+        wma.update(&Ohlcv::new(1000, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
+        wma.update(&Ohlcv::new(1000, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
+        wma.update(&Ohlcv::new(1000, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+
+        assert_eq!(wma.len(), 3);
+        assert!(wma.state().is_ready());
+    }
+
+    #[test]
+    fn wma_temporal_reset_preserves_config() {
+        let mut wma = WMA::new(WMAConfig::with_timeframe(3, 60));
+
+        // Add some data
+        wma.update(&Ohlcv::new(960, 1.0, 1.0, 1.0, 1.0, 0.0)).unwrap();
+        wma.update(&Ohlcv::new(1020, 2.0, 2.0, 2.0, 2.0, 0.0)).unwrap();
+        wma.update(&Ohlcv::new(1080, 3.0, 3.0, 3.0, 3.0, 0.0)).unwrap();
+
+        assert!(wma.is_temporal());
+        assert_eq!(wma.timeframe(), 60);
+
+        wma.reset();
+
+        // Temporal config should be preserved
+        assert!(wma.is_temporal());
+        assert_eq!(wma.timeframe(), 60);
+        assert!(wma.state().is_uninitialized());
     }
 }
