@@ -54,8 +54,8 @@ pub struct RSI {
     warmup_count: usize,
     history: Vec<f64>,
     latest: Option<f64>,
-    /// Track last snapshot length for next() to detect new candles
-    last_len: usize,
+    /// Track last seen timestamp for next() to detect new candles
+    last_ts: i64,
 }
 
 impl RSI {
@@ -72,7 +72,7 @@ impl RSI {
             warmup_count: 0,
             history: Vec::new(),
             latest: None,
-            last_len: 0,
+            last_ts: i64::MIN,
         }
     }
 
@@ -157,7 +157,7 @@ impl Indicator for RSI {
         self.avg_loss = avg_loss;
         self.prev_close = data.last().unwrap().close.0;
         self.latest = self.history.last().copied().filter(|v| !v.is_nan());
-        self.last_len = n;
+        self.last_ts = data.last().unwrap().timestamp.0;
         self.state = IndicatorState::Ready;
 
         Ok(self)
@@ -171,10 +171,12 @@ impl Indicator for RSI {
             return None;
         }
 
-        // Determine if this is a new candle or same snapshot
-        let is_new_candle = len > self.last_len || self.last_len == 0;
+        let current = candles.last().unwrap();
+        let current_ts = current.timestamp.0;
+        let current_close = current.close.0;
 
-        let current_close = candles.last().unwrap().close.0;
+        // Determine if this is a new candle or same snapshot (using timestamp)
+        let is_new_candle = current_ts != self.last_ts;
 
         // Handle warmup phase
         // warmup_count tracks number of deltas accumulated (not candles)
@@ -182,10 +184,10 @@ impl Indicator for RSI {
         if self.warmup_count < period {
             if is_new_candle {
                 // Check if this is the very first candle we've seen
-                if self.last_len == 0 {
+                if self.last_ts == i64::MIN {
                     // First candle - just store close, need second for first delta
                     self.prev_close = current_close;
-                    self.last_len = len;
+                    self.last_ts = current_ts;
                     self.history.push(f64::NAN);
                     self.state = IndicatorState::Warming { count: 1 };
                     return None;
@@ -200,7 +202,7 @@ impl Indicator for RSI {
                 self.warmup_loss_sum += loss;
                 self.warmup_count += 1;
                 self.prev_close = current_close;
-                self.last_len = len;
+                self.last_ts = current_ts;
 
                 if self.warmup_count >= period {
                     // First valid RSI - use SMA of accumulated gains/losses
@@ -237,7 +239,7 @@ impl Indicator for RSI {
             self.avg_gain = (self.avg_gain * p_1 + gain) / p;
             self.avg_loss = (self.avg_loss * p_1 + loss) / p;
             self.prev_close = current_close;
-            self.last_len = len;
+            self.last_ts = current_ts;
 
             let rsi = Self::calculate_rsi(self.avg_gain, self.avg_loss);
             self.history.push(rsi);
@@ -271,7 +273,7 @@ impl Indicator for RSI {
         self.warmup_count = 0;
         self.history.clear();
         self.latest = None;
-        self.last_len = 0;
+        self.last_ts = i64::MIN;
         self.state = IndicatorState::Uninitialized;
     }
 

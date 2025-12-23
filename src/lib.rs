@@ -54,7 +54,6 @@ pub mod prelude {
 
 // Re-export top-level modules for ergonomic access
 pub use ta::trend;
-// TODO: Uncomment after migration to new Indicator trait
-// pub use ta::momentum;
-// pub use ta::volatility;
-// pub use ta::volume;
+pub use ta::momentum;
+pub use ta::volatility;
+pub use ta::volume;

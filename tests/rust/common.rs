@@ -5,6 +5,9 @@
 
 use calamine::{open_workbook, Data, Reader, Xlsx};
 use rolling_ta::prelude::*;
+use rolling_ta::trend::{ADXOutput, DMIOutput, IchimokuOutput};
+use rolling_ta::volatility::{BBOutput, DonchianOutput};
+use rolling_ta::momentum::StochRSIOutput;
 
 pub const EPSILON: f64 = 1e-4;
 
@@ -121,4 +124,216 @@ pub fn assert_histories_equal(context: &str, a: &[f64], b: &[f64], epsilon: f64)
             b_val
         );
     }
+}
+
+// ============================================================
+// Additional Candle Builders
+// ============================================================
+
+/// Build Vec<Ohlcv> from high, low, close columns (no open/volume)
+pub fn build_candles_hlc(highs: &[f64], lows: &[f64], closes: &[f64]) -> Vec<Ohlcv> {
+    highs
+        .iter()
+        .zip(lows)
+        .zip(closes)
+        .enumerate()
+        .map(|(i, ((h, l), c))| Ohlcv::new(i as i64, *c, *h, *l, *c, 0.0))
+        .collect()
+}
+
+/// Build Vec<Ohlcv> from high, low, close, volume columns
+pub fn build_candles_hlcv(
+    highs: &[f64],
+    lows: &[f64],
+    closes: &[f64],
+    volumes: &[f64],
+) -> Vec<Ohlcv> {
+    highs
+        .iter()
+        .zip(lows)
+        .zip(closes)
+        .zip(volumes)
+        .enumerate()
+        .map(|(i, (((h, l), c), v))| Ohlcv::new(i as i64, *c, *h, *l, *c, *v))
+        .collect()
+}
+
+/// Build Vec<Ohlcv> from open, high, low, close columns
+pub fn build_candles_ohlc(
+    opens: &[f64],
+    highs: &[f64],
+    lows: &[f64],
+    closes: &[f64],
+) -> Vec<Ohlcv> {
+    opens
+        .iter()
+        .zip(highs)
+        .zip(lows)
+        .zip(closes)
+        .enumerate()
+        .map(|(i, (((o, h), l), c))| Ohlcv::new(i as i64, *o, *h, *l, *c, 0.0))
+        .collect()
+}
+
+/// Build Vec<Ohlcv> from close and volume columns only
+pub fn build_candles_cv(closes: &[f64], volumes: &[f64]) -> Vec<Ohlcv> {
+    closes
+        .iter()
+        .zip(volumes)
+        .enumerate()
+        .map(|(i, (c, v))| Ohlcv::new(i as i64, *c, *c, *c, *c, *v))
+        .collect()
+}
+
+/// Build Vec<Ohlcv> from timestamp, high, low, close, volume columns
+pub fn build_candles_thlcv(
+    timestamps: &[f64],
+    highs: &[f64],
+    lows: &[f64],
+    closes: &[f64],
+    volumes: &[f64],
+) -> Vec<Ohlcv> {
+    timestamps
+        .iter()
+        .zip(highs)
+        .zip(lows)
+        .zip(closes)
+        .zip(volumes)
+        .map(|((((t, h), l), c), v)| Ohlcv::new(*t as i64, *c, *h, *l, *c, *v))
+        .collect()
+}
+
+/// Compare using relative error (for large cumulative values like OBV)
+pub fn compare_values_relative(
+    name: &str,
+    rust_values: &[f64],
+    true_values: &[f64],
+    tolerance: f64,
+) -> usize {
+    let mut comparisons = 0;
+    for (i, (rust_val, true_val)) in rust_values.iter().zip(true_values.iter()).enumerate() {
+        if !rust_val.is_nan() && !true_val.is_nan() && true_val.abs() > 1e-10 {
+            let rel_diff = (rust_val - true_val).abs() / true_val.abs();
+            assert!(
+                rel_diff < tolerance,
+                "{} mismatch at index {}: Rust={:.6}, Expected={:.6}, rel_diff={:.6}",
+                name,
+                i,
+                rust_val,
+                true_val,
+                rel_diff
+            );
+            comparisons += 1;
+        }
+    }
+    comparisons
+}
+
+// ============================================================
+// Compound Output Comparison Helpers
+// ============================================================
+
+/// Assert two BB histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_bb_histories_equal(context: &str, a: &[BBOutput], b: &[BBOutput], epsilon: f64) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} upper", context), i, a[i].upper, b[i].upper, epsilon);
+        assert_values_equal(&format!("{} middle", context), i, a[i].middle, b[i].middle, epsilon);
+        assert_values_equal(&format!("{} lower", context), i, a[i].lower, b[i].lower, epsilon);
+    }
+}
+
+/// Assert two ADX histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_adx_histories_equal(context: &str, a: &[ADXOutput], b: &[ADXOutput], epsilon: f64) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} +DI", context), i, a[i].plus_di, b[i].plus_di, epsilon);
+        assert_values_equal(&format!("{} -DI", context), i, a[i].minus_di, b[i].minus_di, epsilon);
+        assert_values_equal(&format!("{} DX", context), i, a[i].dx, b[i].dx, epsilon);
+        assert_values_equal(&format!("{} ADX", context), i, a[i].adx, b[i].adx, epsilon);
+    }
+}
+
+/// Assert two DMI histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_dmi_histories_equal(context: &str, a: &[DMIOutput], b: &[DMIOutput], epsilon: f64) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} +DI", context), i, a[i].plus_di, b[i].plus_di, epsilon);
+        assert_values_equal(&format!("{} -DI", context), i, a[i].minus_di, b[i].minus_di, epsilon);
+    }
+}
+
+/// Assert two Ichimoku histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_ichimoku_histories_equal(
+    context: &str,
+    a: &[IchimokuOutput],
+    b: &[IchimokuOutput],
+    epsilon: f64,
+) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} tenkan", context), i, a[i].tenkan, b[i].tenkan, epsilon);
+        assert_values_equal(&format!("{} kijun", context), i, a[i].kijun, b[i].kijun, epsilon);
+        assert_values_equal(&format!("{} senkou_a", context), i, a[i].senkou_a, b[i].senkou_a, epsilon);
+        assert_values_equal(&format!("{} senkou_b", context), i, a[i].senkou_b, b[i].senkou_b, epsilon);
+    }
+}
+
+/// Assert two Donchian histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_donchian_histories_equal(
+    context: &str,
+    a: &[DonchianOutput],
+    b: &[DonchianOutput],
+    epsilon: f64,
+) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} upper", context), i, a[i].upper, b[i].upper, epsilon);
+        assert_values_equal(&format!("{} middle", context), i, a[i].middle, b[i].middle, epsilon);
+        assert_values_equal(&format!("{} lower", context), i, a[i].lower, b[i].lower, epsilon);
+    }
+}
+
+/// Assert two StochRSI histories are equal within epsilon
+#[allow(dead_code)]
+pub fn assert_stochrsi_histories_equal(
+    context: &str,
+    a: &[StochRSIOutput],
+    b: &[StochRSIOutput],
+    epsilon: f64,
+) {
+    assert_eq!(a.len(), b.len(), "{}: length mismatch {} vs {}", context, a.len(), b.len());
+
+    for i in 0..a.len() {
+        assert_values_equal(&format!("{} k", context), i, a[i].k, b[i].k, epsilon);
+        assert_values_equal(&format!("{} d", context), i, a[i].d, b[i].d, epsilon);
+    }
+}
+
+/// Helper to compare two values, handling NaN
+fn assert_values_equal(context: &str, index: usize, a: f64, b: f64, epsilon: f64) {
+    if a.is_nan() && b.is_nan() {
+        return;
+    }
+    if a.is_nan() || b.is_nan() {
+        panic!("{} at index {}: NaN mismatch ({} vs {})", context, index, a, b);
+    }
+    assert!(
+        (a - b).abs() < epsilon,
+        "{} at index {}: {} != {}",
+        context,
+        index,
+        a,
+        b
+    );
 }

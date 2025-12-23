@@ -52,8 +52,8 @@ pub struct ATR {
     warmup_count: usize,
     history: Vec<f64>,
     latest: Option<f64>,
-    /// Track last snapshot length for next() to detect new candles
-    last_len: usize,
+    /// Track last seen timestamp for next() to detect new candles
+    last_ts: i64,
     /// Previous close for TR calculation
     prev_close: f64,
 }
@@ -69,7 +69,7 @@ impl ATR {
             warmup_count: 0,
             history: Vec::new(),
             latest: None,
-            last_len: 0,
+            last_ts: i64::MIN,
             prev_close: 0.0,
         }
     }
@@ -139,7 +139,7 @@ impl Indicator for ATR {
 
         self.prev_close = data.last().unwrap().close.0;
         self.latest = self.history.last().copied().filter(|v| !v.is_nan());
-        self.last_len = n;
+        self.last_ts = data.last().unwrap().timestamp.0;
         self.state = IndicatorState::Ready;
 
         Ok(self)
@@ -153,16 +153,17 @@ impl Indicator for ATR {
             return None;
         }
 
-        // Determine if this is a new candle or same snapshot
-        let is_new_candle = len > self.last_len || self.last_len == 0;
-
         let current = candles.last().unwrap();
+        let current_ts = current.timestamp.0;
         let high = current.high.0;
         let low = current.low.0;
         let close = current.close.0;
 
+        // Determine if this is a new candle or same snapshot (using timestamp)
+        let is_new_candle = current_ts != self.last_ts;
+
         // Calculate TR for current candle
-        let tr = if self.last_len == 0 {
+        let tr = if self.last_ts == i64::MIN {
             // Very first candle - TR is just high - low
             high - low
         } else if len >= 2 {
@@ -180,7 +181,7 @@ impl Indicator for ATR {
                 self.warmup_tr_sum += tr;
                 self.warmup_count += 1;
                 self.prev_close = close;
-                self.last_len = len;
+                self.last_ts = current_ts;
 
                 if self.warmup_count >= period {
                     // First valid ATR - use SMA of accumulated TR values
@@ -210,7 +211,7 @@ impl Indicator for ATR {
             // Commit new state
             self.atr_value = (self.atr_value * p_1 + tr) / p;
             self.prev_close = close;
-            self.last_len = len;
+            self.last_ts = current_ts;
 
             self.history.push(self.atr_value);
             self.latest = Some(self.atr_value);
@@ -238,7 +239,7 @@ impl Indicator for ATR {
         self.warmup_count = 0;
         self.history.clear();
         self.latest = None;
-        self.last_len = 0;
+        self.last_ts = i64::MIN;
         self.prev_close = 0.0;
         self.state = IndicatorState::Uninitialized;
     }
