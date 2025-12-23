@@ -23,7 +23,8 @@ fn donchian_batch_vs_reference() {
     let candles = build_candles_hlc(highs, lows, highs); // use high as close (not used in Donchian)
 
     // Batch calculation (validates against Python reference)
-    let mut donchian = Donchian::new(DonchianConfig::new(20));
+    // Python default period is 14, not 20
+    let mut donchian = Donchian::new(DonchianConfig::new(14));
     donchian.calc(&candles).unwrap();
 
     let history = donchian.history();
@@ -51,7 +52,8 @@ fn donchian_streaming_next_vs_batch() {
     let lows = &cols[1];
     let candles = build_candles_hlc(highs, lows, highs);
 
-    let period = 20;
+    // Python default period is 14
+    let period = 14;
 
     // 1. Batch calculation
     let mut batch = Donchian::new(DonchianConfig::new(period));
@@ -64,9 +66,9 @@ fn donchian_streaming_next_vs_batch() {
         stream.next(snapshot);
     }
 
-    // Compare computed values only
+    // Compare computed values only (skip NaN warmup from both)
     let batch_computed: Vec<_> = batch.history().iter().filter(|o| !o.middle.is_nan()).cloned().collect();
-    let stream_computed = stream.history();
+    let stream_computed: Vec<_> = stream.history().iter().filter(|o| !o.middle.is_nan()).cloned().collect();
 
     assert_eq!(
         batch_computed.len(),
@@ -77,7 +79,7 @@ fn donchian_streaming_next_vs_batch() {
     );
 
     let epsilon = 1e-6;
-    assert_donchian_histories_equal("Donchian batch vs stream", &batch_computed, stream_computed, epsilon);
+    assert_donchian_histories_equal("Donchian batch vs stream", &batch_computed, &stream_computed, epsilon);
 }
 
 #[test]
@@ -90,12 +92,13 @@ fn donchian_next_with_fixed_window() {
     let expected_middle = &cols[4];
     let candles = build_candles_hlc(highs, lows, highs);
 
-    let period = 20;
+    // Python default period is 14
+    let period = 14;
     let mut donchian = Donchian::new(DonchianConfig::new(period));
 
-    // Feed snapshots of exactly `period` candles
-    for i in period..candles.len() {
-        let snapshot = &candles[i - period + 1..=i];
+    // Feed snapshots of exactly period candles (matching Python behavior)
+    for i in (period - 1)..candles.len() {
+        let snapshot = &candles[i + 1 - period..=i];
         let result = donchian.next(snapshot);
 
         assert!(result.is_some(), "Should have result at index {}", i);

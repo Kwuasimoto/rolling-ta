@@ -158,14 +158,16 @@ impl Indicator for Donchian {
         // Reset state
         self.history = Vec::with_capacity(n);
 
-        // Fill with NaN for warmup period
+        // Fill with NaN for warmup period (indices 0 to period-2)
         for _ in 0..(period - 1) {
             self.history.push(DonchianOutput::default());
         }
 
         // Calculate Donchian from period-1 onwards
+        // Window is [i - period + 1, i] inclusive (N candles including current)
+        // This matches Python: for i in range(period - 1, size)
         for i in (period - 1)..n {
-            let window = &data[(i + 1 - period)..=i];
+            let window = &data[(i + 1 - period)..=i]; // indices [i-period+1, i]
             let output = Self::compute_from_candles(window);
             self.history.push(output);
         }
@@ -182,7 +184,7 @@ impl Indicator for Donchian {
         let period = self.config.period;
 
         if len < period {
-            // Not enough data yet
+            // Not enough data yet (need at least period candles)
             if len > self.last_len || self.last_len == 0 {
                 self.history.push(DonchianOutput::default());
                 self.last_len = len;
@@ -194,7 +196,7 @@ impl Indicator for Donchian {
         // Determine if this is a new candle or same snapshot
         let is_new_candle = len > self.last_len || self.last_len == 0;
 
-        // Extract last `period` candles
+        // Use last N candles (including current) - matches Python behavior
         let window = &candles[(len - period)..];
         let output = Self::compute_from_candles(window);
 

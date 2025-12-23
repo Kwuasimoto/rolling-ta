@@ -12,8 +12,8 @@ use rolling_ta::prelude::*;
 
 #[test]
 fn roc_batch_vs_reference() {
-    // btc-roc.xlsx: timestamp(0), close(1), roc(2)
-    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[1, 2]);
+    // btc-roc.xlsx: timestamp(0), open(1), high(2), low(3), close(4), volume(5), roc(6)
+    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[4, 6]);
     let closes = &cols[0];
     let expected = &cols[1];
     let candles = build_candles_from_closes(closes);
@@ -36,8 +36,8 @@ fn roc_batch_vs_reference() {
 
 #[test]
 fn roc_streaming_next_vs_batch() {
-    // btc-roc.xlsx: timestamp(0), close(1), roc(2)
-    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[1, 2]);
+    // btc-roc.xlsx: timestamp(0), open(1), high(2), low(3), close(4), volume(5), roc(6)
+    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[4]);
     let closes = &cols[0];
     let candles = build_candles_from_closes(closes);
 
@@ -54,9 +54,9 @@ fn roc_streaming_next_vs_batch() {
         stream.next(snapshot);
     }
 
-    // Compare computed values only (skip NaN warmup from batch)
+    // Compare computed values only (skip NaN warmup from both)
     let batch_computed: Vec<f64> = batch.history().iter().filter(|&v| !v.is_nan()).copied().collect();
-    let stream_computed = stream.history();
+    let stream_computed: Vec<f64> = stream.history().iter().filter(|&v| !v.is_nan()).copied().collect();
 
     assert_eq!(
         batch_computed.len(),
@@ -67,13 +67,14 @@ fn roc_streaming_next_vs_batch() {
     );
 
     let epsilon = 1e-6;
-    assert_histories_equal("ROC batch vs stream", &batch_computed, stream_computed, epsilon);
+    assert_histories_equal("ROC batch vs stream", &batch_computed, &stream_computed, epsilon);
 }
 
 #[test]
 fn roc_next_with_fixed_window() {
     // Simulates SharedWindow pattern where snapshot size is limited
-    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[1, 2]);
+    // btc-roc.xlsx: timestamp(0), open(1), high(2), low(3), close(4), volume(5), roc(6)
+    let cols = read_xlsx_by_position("resources/data/btc-roc.xlsx", &[4, 6]);
     let closes = &cols[0];
     let expected = &cols[1];
     let candles = build_candles_from_closes(closes);

@@ -203,6 +203,42 @@ pub fn build_candles_thlcv(
         .collect()
 }
 
+/// Compare values with warmup offset.
+///
+/// Skips `warmup` values in `true_values` to align with Rust history
+/// which doesn't include warmup NaN/zeros.
+///
+/// Use this when Python reference data includes zeros for warmup period
+/// but Rust indicator only outputs computed values.
+pub fn compare_values_with_warmup(
+    name: &str,
+    rust_values: &[f64],
+    true_values: &[f64],
+    warmup: usize,
+    epsilon: f64,
+) -> usize {
+    let expected_offset = &true_values[warmup..];
+    let mut comparisons = 0;
+
+    for (i, (rust_val, true_val)) in rust_values.iter().zip(expected_offset.iter()).enumerate() {
+        if !rust_val.is_nan() && !true_val.is_nan() {
+            let diff = (rust_val - true_val).abs();
+            assert!(
+                diff < epsilon,
+                "{} mismatch at data index {} (rust[{}]): Rust={:.6}, Expected={:.6}, diff={:.6}",
+                name,
+                i + warmup,
+                i,
+                rust_val,
+                true_val,
+                diff
+            );
+            comparisons += 1;
+        }
+    }
+    comparisons
+}
+
 /// Compare using relative error (for large cumulative values like OBV)
 pub fn compare_values_relative(
     name: &str,

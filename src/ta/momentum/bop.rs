@@ -139,7 +139,7 @@ impl Indicator for BOP {
         let smoothing = self.smoothing();
 
         // Reset state
-        self.history = Vec::with_capacity(n.saturating_sub(smoothing - 1));
+        self.history = Vec::with_capacity(n);
         self.raw_bop_window.clear();
         self.raw_bop_sum = 0.0;
         self.latest = None;
@@ -148,6 +148,11 @@ impl Indicator for BOP {
             self.last_len = 0;
             self.state = IndicatorState::Ready;
             return Ok(self);
+        }
+
+        // Fill NaN for warmup period
+        for _ in 0..(smoothing - 1) {
+            self.history.push(f64::NAN);
         }
 
         // Process all candles
@@ -300,7 +305,11 @@ mod tests {
         bop.calc(&candles).unwrap();
 
         assert!(bop.state().is_ready());
-        assert_eq!(bop.len(), 2); // 4 - 3 + 1 = 2
+        // History includes NaN warmup + computed values: 2 NaN + 2 values = 4
+        assert_eq!(bop.len(), 4);
+        // But only 2 computed values (non-NaN)
+        let computed: Vec<_> = bop.history().iter().filter(|v| !v.is_nan()).collect();
+        assert_eq!(computed.len(), 2);
     }
 
     #[test]
@@ -375,15 +384,17 @@ mod tests {
             stream.next(&candles[..i]);
         }
 
-        assert_eq!(batch.len(), stream.len(), "History lengths should match");
+        // Compare computed values only (skip NaN warmup)
+        let batch_computed: Vec<f64> = batch.history().iter().filter(|v| !v.is_nan()).copied().collect();
+        let stream_computed: Vec<f64> = stream.history().iter().filter(|v| !v.is_nan()).copied().collect();
 
-        for i in 0..batch.len() {
-            let batch_val = batch.get(i as isize).unwrap();
-            let stream_val = stream.get(i as isize).unwrap();
+        assert_eq!(batch_computed.len(), stream_computed.len(), "Computed value counts should match");
+
+        for i in 0..batch_computed.len() {
             assert!(
-                (batch_val - stream_val).abs() < 1e-10,
+                (batch_computed[i] - stream_computed[i]).abs() < 1e-10,
                 "Mismatch at index {}: batch={}, stream={}",
-                i, batch_val, stream_val
+                i, batch_computed[i], stream_computed[i]
             );
         }
     }
@@ -402,7 +413,8 @@ mod tests {
 
         bop.calc(&candles).unwrap();
 
-        for value in bop.history() {
+        // Check computed values only (skip NaN warmup)
+        for value in bop.history().iter().filter(|v| !v.is_nan()) {
             assert!(
                 *value >= -1.0 && *value <= 1.0,
                 "BOP should be between -1 and 1, got {}",
@@ -479,6 +491,8 @@ mod tests {
 
         bop.calc(&candles).unwrap();
         assert!(bop.state().is_ready());
-        assert!(bop.is_empty()); // Not enough data
+        // History has NaN warmup values but no computed values
+        let computed: Vec<_> = bop.history().iter().filter(|v| !v.is_nan()).collect();
+        assert!(computed.is_empty(), "Should have no computed values");
     }
 }

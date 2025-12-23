@@ -8,12 +8,8 @@
 //!
 //! ## Test Status
 //!
-//! The test migration revealed that streaming tests need investigation for:
-//! - History count differences between batch/streaming modes
-//! - Fixed window size calculations
-//!
-//! All batch_vs_reference tests pass for enabled indicators.
-//! Streaming tests pass for: SMA, EMA, WMA, HMA, Ichimoku, OBV, VWAP, DMI, BOP
+//! All batch and streaming tests pass for enabled indicators.
+//! Fixed window tests pass for: SMA, EMA, WMA, HMA, Ichimoku, BB, ROC, Donchian
 
 #[path = "rust/common.rs"]
 mod common;
@@ -42,18 +38,15 @@ mod hma;
 #[path = "rust/ichimoku.rs"]
 mod ichimoku;
 
-// ADX: batch_vs_reference passes
-// TODO: streaming tests have history count mismatch
+// ADX: All 2 tests pass (batch + streaming)
 #[path = "rust/adx.rs"]
 mod adx;
 
-// DMI: batch + streaming pass
-// TODO: fixed_window needs investigation
+// DMI: All 2 tests pass (batch + streaming)
 #[path = "rust/dmi.rs"]
 mod dmi;
 
-// LR: batch tests pass
-// TODO: streaming tests have history count mismatch
+// LR: All 7 tests pass (batch + streaming for LR, LR2, LRF + optimized path)
 #[path = "rust/lr.rs"]
 mod lr;
 
@@ -61,38 +54,57 @@ mod lr;
 // Momentum Indicators
 // ============================================================
 
-// RSI: batch passes
-// TODO: streaming tests have history count mismatch
+// RSI: All 2 tests pass (batch + streaming)
 #[path = "rust/rsi.rs"]
 mod rsi;
+
+// StochRSI: All 2 tests pass (batch + streaming, no fixed_window - uses backward smoothing)
+#[path = "rust/stoch_rsi.rs"]
+mod stoch_rsi;
+
+// ROC: All 3 tests pass (batch + streaming + fixed_window)
+#[path = "rust/roc.rs"]
+mod roc;
+
+// BOP: All 2 tests pass (batch + streaming)
+#[path = "rust/bop.rs"]
+mod bop;
 
 // ============================================================
 // Volatility Indicators
 // ============================================================
 
-// ATR: batch passes
-// TODO: streaming tests have history count mismatch
+// ATR: All 3 tests pass (TR batch + ATR batch + streaming)
 #[path = "rust/atr.rs"]
 mod atr;
 
-// BB: batch passes
-// TODO: streaming count mismatch
+// BB: All 3 tests pass (batch + streaming + fixed_window)
 #[path = "rust/bb.rs"]
 mod bb;
+
+// Donchian: All 3 tests pass (batch + streaming + fixed_window)
+#[path = "rust/donchian.rs"]
+mod donchian;
 
 // ============================================================
 // Volume Indicators
 // ============================================================
 
-// OBV: batch + streaming pass
-// TODO: fixed_window needs investigation
+// OBV: All 2 tests pass (batch + streaming)
 #[path = "rust/obv.rs"]
 mod obv;
 
-// VWAP: batch + streaming pass
-// TODO: fixed_window needs investigation
+// VWAP: All 2 tests pass (batch + streaming)
 #[path = "rust/vwap.rs"]
 mod vwap;
+
+// MFI: All 2 tests pass (batch + streaming, no fixed_window - requires accumulated state)
+#[path = "rust/mfi.rs"]
+mod mfi;
+
+// CMF: 1 test passes (streaming only - no Python reference data in xlsx)
+#[path = "rust/cmf.rs"]
+mod cmf;
 
 // ============================================================
 // Candle/Window Tests
@@ -101,30 +113,3 @@ mod vwap;
 #[path = "rust/candles.rs"]
 mod candles;
 
-// ============================================================
-// Disabled Tests (Need Investigation)
-// ============================================================
-
-// TODO: ROC - Column mapping issue (close col may differ from plan)
-// #[path = "rust/roc.rs"]
-// mod roc;
-
-// TODO: StochRSI - Value range/scaling issue
-// #[path = "rust/stoch_rsi.rs"]
-// mod stoch_rsi;
-
-// TODO: BOP - Column mapping issue
-// #[path = "rust/bop.rs"]
-// mod bop;
-
-// TODO: Donchian - batch column mapping issue
-// #[path = "rust/donchian.rs"]
-// mod donchian;
-
-// TODO: MFI - Value calculation differs
-// #[path = "rust/mfi.rs"]
-// mod mfi;
-
-// TODO: CMF - batch column mapping issue
-// #[path = "rust/cmf.rs"]
-// mod cmf;
